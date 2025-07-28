@@ -25,10 +25,71 @@ class CarController(CarControllerBase):
     self.hca_frame_timer_running = 0
     self.hca_frame_same_torque = 0
 
+    # wheel speed spoofing for stop-and-go workaround
+    self.wheel_speed_spoof_timer = 0
+    self.wheel_speed_spoof_active = False
+    self.wheel_speed_spoof_value = 133  # 1 km/h = 133 units (1/0.0075)
+    self.wheel_speed_spoof_counter = 0
+    self.wheel_speed_spoof_debug_frame = 0  # for debug logging
+
+  def should_spoof_wheel_speed(self, CS):
+    """check if we should spoof wheel speed to prevent 3-second timeout"""
+    # wait for system to stabilize (2 seconds) before starting spoofing
+    if self.frame < 200:  # 2 seconds at 100Hz
+      return False
+
+    # check if we're stopped, engaged, and not using EPB
+    should_spoof = (CS.out.standstill and
+                    CS.out.cruiseState.enabled and
+                    not CS.out.parkingBrake and
+                    CS.out.vEgoRaw < 0.1)  # very low speed threshold
+
+    # debug output every 500 frames (5 seconds)
+    if self.frame % 500 == 0:
+      print(f"WHEEL_SPEED_SPOOF_DEBUG: frame={self.frame}, standstill={CS.out.standstill}, cruise_enabled={CS.out.cruiseState.enabled}, parking_brake={CS.out.parkingBrake}, vEgoRaw={CS.out.vEgoRaw}, should_spoof={should_spoof}")
+
+    return should_spoof
+
+  def create_spoofed_wheel_speed(self):
+    """create ESP_19 message with spoofed wheel speeds"""
+    # increment counter (0-15, wraps around)
+    self.wheel_speed_spoof_counter = (self.wheel_speed_spoof_counter + 1) % 16
+
+    values = {
+        "ESP_VL_Radgeschw_02": self.wheel_speed_spoof_value,
+        "ESP_VR_Radgeschw_02": self.wheel_speed_spoof_value,
+        "ESP_HL_Radgeschw_02": self.wheel_speed_spoof_value,
+        "ESP_HR_Radgeschw_02": self.wheel_speed_spoof_value
+    }
+    return self.packer_pt.make_can_msg("ESP_19", 0, values)
+
   def update(self, CC, CS, now_nanos):
     actuators = CC.actuators
     hud_control = CC.hudControl
     can_sends = []
+
+    # **** Wheel Speed Spoofing Logic ************************************************ #
+
+    if self.should_spoof_wheel_speed(CS):
+      self.wheel_speed_spoof_timer += 1
+
+      # spoof every 0.9 seconds (90 frames at 100Hz) to reset 3-second timer
+      if self.wheel_speed_spoof_timer >= 90:
+        self.wheel_speed_spoof_active = True
+        self.wheel_speed_spoof_timer = 0
+      else:
+        self.wheel_speed_spoof_active = False
+    else:
+      self.wheel_speed_spoof_timer = 0
+      self.wheel_speed_spoof_active = False
+
+    # send spoofed wheel speed message when active
+    if self.wheel_speed_spoof_active:
+      # can_sends.append(self.create_spoofed_wheel_speed())  # temporarily disabled for testing
+      # debug logging every 100 frames (1 second at 100Hz)
+      self.wheel_speed_spoof_debug_frame += 1
+      if self.wheel_speed_spoof_debug_frame % 100 == 0:
+        print(f"WHEEL_SPEED_SPOOF: Active - Timer: {self.wheel_speed_spoof_timer}, Counter: {self.wheel_speed_spoof_counter}")
 
     # **** Steering Controls ************************************************ #
 
