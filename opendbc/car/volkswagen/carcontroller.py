@@ -81,8 +81,20 @@ class CarController(CarControllerBase):
       if self.frame % self.CCP.ACC_CONTROL_STEP == 0:
         acc_control = self.CCS.acc_control_value(CS.out.cruiseState.available, CS.out.accFaulted, CC.longActive)
         accel = float(np.clip(actuators.accel, self.CCP.ACCEL_MIN, self.CCP.ACCEL_MAX) if CC.longActive else 0)
-        stopping = actuators.longControlState == LongCtrlState.stopping
-        starting = actuators.longControlState == LongCtrlState.pid and (CS.esp_hold_confirmation or CS.out.vEgo < self.CP.vEgoStopping)
+
+        # Hack Code
+        # Determine if we should be in a holding state
+        is_holding_state = actuators.longControlState in (LongCtrlState.stopping, LongCtrlState.pid) and CS.out.vEgo < self.CP.vEgoStopping
+
+        if is_holding_state:
+          # Rapidly alternate between starting and stopping on every other frame
+          stopping = self.frame % 2 == 0
+          starting = not stopping
+        else:
+          # Default behavior when not at a stop
+          stopping = actuators.longControlState == LongCtrlState.stopping
+          starting = actuators.longControlState == LongCtrlState.pid and (CS.esp_hold_confirmation or CS.out.vEgo < self.CP.vEgoStopping)
+
         can_sends.extend(self.CCS.create_acc_accel_control(self.packer_pt, self.CAN.pt, CS.acc_type, CC.longActive, accel,
                                                            acc_control, stopping, starting, CS.esp_hold_confirmation))
 
