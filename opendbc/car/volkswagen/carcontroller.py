@@ -25,6 +25,16 @@ class CarController(CarControllerBase):
     self.eps_timer_soft_disable_alert = False
     self.hca_frame_timer_running = 0
     self.hca_frame_same_torque = 0
+    # track duration spent fully stopped while in esp hold on mqb platforms
+    # mqb acc faults after ~1s of continuous brake request at standstill; after ~0.9s we clamp
+    # requested accel slightly positive to avoid exceeding that window until the car rolls off
+    self.standstill_hold_elapsed = 0.0
+    # periodic startup pulse generator to emulate observed ACC_Anfahren/Anhalten oscillation
+    self.hold_pulse_elapsed = 0.0
+    self.hold_pulse_frames_remaining = 0
+    self.hold_pulse_period_s = 0.5
+    self.hold_pulse_width_frames = 1  # number of ACC frames (50Hz) to assert the pulse
+    self._hold_condition_prev = False
 
   def update(self, CC, CS, now_nanos):
     actuators = CC.actuators
@@ -77,12 +87,44 @@ class CarController(CarControllerBase):
 
     # **** Acceleration Controls ******************************************** #
 
+    print("standstill_hold_elapsed", self.standstill_hold_elapsed)
     if self.CP.openpilotLongitudinalControl:
+      # update standstill hold timer every control tick
+      # arm on standstill or low speed regardless of esp hold, mqb only
+      hold_condition = (CC.longActive and not (self.CP.flags & VolkswagenFlags.PQ) and (CS.out.standstill or CS.out.vEgo < self.CP.vEgoStopping))
+      if hold_condition:
+        # rising edge: fire an immediate one-frame pulse and reset timer
+        if not self._hold_condition_prev:
+          self.hold_pulse_elapsed = 0.0
+          self.hold_pulse_frames_remaining = self.hold_pulse_width_frames
+          self.standstill_hold_elapsed = 0.0
+        else:
+          self.standstill_hold_elapsed += DT_CTRL
+        # run pulse timer continuously while held
+        self.hold_pulse_elapsed += DT_CTRL
+        if self.hold_pulse_elapsed >= self.hold_pulse_period_s:
+          self.hold_pulse_elapsed = 0.0
+          self.hold_pulse_frames_remaining = self.hold_pulse_width_frames
+      else:
+        self.standstill_hold_elapsed = 0.0
+        self.hold_pulse_elapsed = 0.0
+        self.hold_pulse_frames_remaining = 0
+      self._hold_condition_prev = hold_condition
+
       if self.frame % self.CCP.ACC_CONTROL_STEP == 0:
         acc_control = self.CCS.acc_control_value(CS.out.cruiseState.available, CS.out.accFaulted, CC.longActive)
         accel = float(np.clip(actuators.accel, self.CCP.ACCEL_MIN, self.CCP.ACCEL_MAX) if CC.longActive else 0)
+        # after ~0.5s of standstill hold, prevent further negative accel to avoid mqb cruise faults
+        if self.standstill_hold_elapsed >= 0.5:
+          accel = max(accel, 0.05)
         stopping = actuators.longControlState == LongCtrlState.stopping
         starting = actuators.longControlState == LongCtrlState.pid and (CS.esp_hold_confirmation or CS.out.vEgo < self.CP.vEgoStopping)
+        # apply a one-frame startup pulse periodically while held (or immediately on entering hold)
+        if hold_condition and self.hold_pulse_frames_remaining > 0:
+          starting = True
+          stopping = False
+          accel = max(accel, 0.05)
+          self.hold_pulse_frames_remaining -= 1
         can_sends.extend(self.CCS.create_acc_accel_control(self.packer_pt, self.CAN.pt, CS.acc_type, CC.longActive, accel,
                                                            acc_control, stopping, starting, CS.esp_hold_confirmation))
 
