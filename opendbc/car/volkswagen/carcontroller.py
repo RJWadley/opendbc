@@ -79,11 +79,28 @@ class CarController(CarControllerBase):
 
     if self.CP.openpilotLongitudinalControl:
       if self.frame % self.CCP.ACC_CONTROL_STEP == 0:
-        acc_control = self.CCS.acc_control_value(CS.out.cruiseState.available, CS.out.accFaulted, CC.longActive)
-        accel = float(np.clip(actuators.accel, self.CCP.ACCEL_MIN, self.CCP.ACCEL_MAX) if CC.longActive else 0)
-        stopping = actuators.longControlState == LongCtrlState.stopping
-        starting = actuators.longControlState == LongCtrlState.pid and (CS.esp_hold_confirmation or CS.out.vEgo < self.CP.vEgoStopping)
-        can_sends.extend(self.CCS.create_acc_accel_control(self.packer_pt, self.CAN.pt, CS.acc_type, CC.longActive, accel,
+        longActive = CC.longActive and not CS.out.brakePressed
+
+        acc_control = self.CCS.acc_control_value(CS.out.cruiseState.available, CS.out.accFaulted, longActive)
+        accel = float(np.clip(actuators.accel, self.CCP.ACCEL_MIN, self.CCP.ACCEL_MAX) if longActive else 0)
+        stopping = longActive and actuators.longControlState == LongCtrlState.stopping
+        rollout_in_progress = CS.out.vEgo < self.CP.vEgoStopping and accel > 0
+        starting = longActive and actuators.longControlState == LongCtrlState.pid and (CS.esp_hold_confirmation or rollout_in_progress)
+
+        # reset standstill timer for MQB w/out EPB while braking
+        # this mimics what would happen if the stock ACC intentionally rolled off after holding for too long
+        # the main difference is that the stock ACC also enables freewheel (ACC_Freilauf_Info) during this time
+        # but we leave it disabled, which resets the timer without actually rolling off
+        if longActive and stopping and CS.esp_hold_confirmation and not (self.CP.flags & VolkswagenFlags.PQ) and CS.acc_type == 1:
+          self.frames_at_standstill += 1
+          if (self.frames_at_standstill > 25 and self.frames_at_standstill % 5 == 0): # after 0.5s, every 0.1s
+            starting = True
+            stopping = False
+            accel = 0.01
+        if not CS.esp_hold_confirmation:
+          self.frames_at_standstill = 0
+
+        can_sends.extend(self.CCS.create_acc_accel_control(self.packer_pt, self.CAN.pt, CS.acc_type, longActive, accel,
                                                            acc_control, stopping, starting, CS.esp_hold_confirmation))
 
       #if self.aeb_available:
