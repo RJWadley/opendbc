@@ -89,26 +89,19 @@ class CarController(CarControllerBase):
         starting = longActive and actuators.longControlState == LongCtrlState.pid and (CS.esp_hold_confirmation or CS.out.vEgo < self.CP.vEgoStopping)
 
         # reset standstill timer for MQB w/out EPB while braking
-        # max standstill time before fault is around 1s. to reset the timer, we need to:
-        # 1. send a one frame pulse of acceleration
-        # 2. wait for ESP to confirm the request by releasing esp_hold_confirmation
-        # 3. immediately reenable brake hold
-        if longActive and CS.out.standstill and accel < 0 and not (self.CP.flags & VolkswagenFlags.PQ):
-          MAX_STANDSTILL = 25 # 0.5s at 50hz
-          PULSE_INTERVAL = 3
+        # this mimics what would happen if the stock ACC intentionally rolled off after holding for too long
+        # the main difference is that the stock ACC also enables freewheel (ACC_Freilauf_Info) during this time
+        # but we leave it disabled, which resets the timer without actually rolling off
+        standstill_reset = False
+        if longActive and CS.esp_hold_confirmation and accel < 0 and not (self.CP.flags & VolkswagenFlags.PQ) and CS.acc_type == 1:
           self.frames_at_standstill += 1
-          if (self.frames_at_standstill > MAX_STANDSTILL):
-            if CS.esp_hold_confirmation:
-              # if the car fails to acknowledge in a timely manner, keep pulsing until it does
-              if self.frames_at_standstill % PULSE_INTERVAL == 0:
-                starting = True
-                stopping = False
-                accel = 0.01  # must be > 0
-            else:
-              self.frames_at_standstill = 0
+          if (CS.out.standstill and self.frames_at_standstill > 25): # 0.5s at 50hz
+            standstill_reset = True
+        if not CS.esp_hold_confirmation:
+          self.frames_at_standstill = 0
 
         can_sends.extend(self.CCS.create_acc_accel_control(self.packer_pt, self.CAN.pt, CS.acc_type, longActive, accel,
-                                                           acc_control, stopping, starting, CS.esp_hold_confirmation))
+                                                           acc_control, stopping, starting, CS.esp_hold_confirmation, standstill_reset))
 
       #if self.aeb_available:
       #  if self.frame % self.CCP.AEB_CONTROL_STEP == 0:

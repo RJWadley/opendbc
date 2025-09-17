@@ -88,8 +88,13 @@ def acc_hud_status_value(main_switch_on, acc_faulted, long_active):
   return acc_control_value(main_switch_on, acc_faulted, long_active)
 
 
-def create_acc_accel_control(packer, bus, acc_type, acc_enabled, accel, acc_control, stopping, starting, esp_hold):
+def create_acc_accel_control(packer, bus, acc_type, acc_enabled, accel, acc_control, stopping, starting, esp_hold, standstill_reset):
   commands = []
+
+  if standstill_reset:
+    starting = True
+    stopping = False
+    accel = 3.01
 
   acc_06_values = {
     "ACC_Typ": acc_type,
@@ -105,7 +110,9 @@ def create_acc_accel_control(packer, bus, acc_type, acc_enabled, accel, acc_cont
   }
   commands.append(packer.make_can_msg("ACC_06", bus, acc_06_values))
 
-  if starting:
+  if standstill_reset:
+    acc_hold_type = 0
+  elif starting:
     acc_hold_type = 4  # hold release / startup
   elif esp_hold:
     acc_hold_type = 3  # hold standby
