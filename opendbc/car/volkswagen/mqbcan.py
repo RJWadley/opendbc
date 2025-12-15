@@ -31,6 +31,37 @@ def create_eps_update(packer, bus, eps_stock_values, ea_simulated_torque):
   return packer.make_can_msg("LH_EPS_03", bus, values)
 
 
+def create_esp_hold_spoof(packer, bus, esp_stock_values):
+  # spoof ESP_21 with ESP_Haltebestaetigung forced to 0 to prevent ACC type 1 hold fault
+  values = {s: esp_stock_values[s] for s in [
+    "COUNTER",
+    "BR_Eingriffsmoment",
+    "ESP_PLA_Bremseingriff",
+    "ESP_Diagnose",
+    "ESC_Reku_Freigabe",
+    "ESC_v_Signal_Qualifier_High_Low",
+    "ESP_Vorsteuerung",
+    "ESP_AWV3_Brems_aktiv",
+    "OBD_Schlechtweg",
+    "OBD_QBit_Schlechtweg",
+    "ESP_v_Signal",
+    "ASR_Tastung_passiv",
+    "ESP_Tastung_passiv",
+    "ESP_Systemstatus",
+    "ASR_Schalteingriff",
+    "ESP_MKB_Abbruch_Geschw",
+    "ESP_QBit_v_Signal",
+    "ABS_Bremsung",
+    "ASR_Anf",
+    "MSR_Anf",
+    "EBV_Eingriff",
+    "EDS_Eingriff",
+    "ESP_Eingriff",
+  ]}
+  values["ESP_Haltebestaetigung"] = 0
+  return packer.make_can_msg("ESP_21", bus, values)
+
+
 def create_lka_hud_control(packer, bus, ldw_stock_values, lat_active, steering_pressed, hud_alert, hud_control):
   values = {}
   if len(ldw_stock_values):

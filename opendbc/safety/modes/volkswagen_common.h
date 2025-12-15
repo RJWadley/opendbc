@@ -21,6 +21,7 @@ bool volkswagen_brake_pressure_detected = false;
 
 #define MSG_LH_EPS_03        0x09FU   // RX from EPS, for driver steering torque
 #define MSG_ESP_19           0x0B2U   // RX from ABS, for wheel speeds
+#define MSG_ESP_21           0x0FDU   // RX from ABS, for ESP hold confirmation; TX by OP for hold spoof
 #define MSG_ESP_05           0x106U   // RX from ABS, for brake switch state
 #define MSG_TSK_06           0x120U   // RX from ECU, for ACC status from drivetrain coordinator
 #define MSG_MOTOR_20         0x121U   // RX from ECU, for driver throttle input
@@ -80,6 +81,8 @@ static uint32_t volkswagen_mqb_meb_compute_crc(const CANPacket_t *msg) {
     crc ^= (uint8_t[]){0xE9, 0x65, 0xAE, 0x6B, 0x7B, 0x35, 0xE5, 0x5F, 0x4E, 0xC7, 0x86, 0xA2, 0xBB, 0xDD, 0xEB, 0xB4}[counter];
   } else if (msg->addr == MSG_GRA_ACC_01) {
     crc ^= (uint8_t[]){0x6A, 0x38, 0xB4, 0x27, 0x22, 0xEF, 0xE1, 0xBB, 0xF8, 0x80, 0x84, 0x49, 0xC7, 0x9E, 0x1E, 0x2B}[counter];
+  } else if (msg->addr == MSG_ESP_21) {
+    crc ^= (uint8_t[]){0xB4, 0xEF, 0xF8, 0x49, 0x1E, 0xE5, 0xC2, 0xC0, 0x97, 0x19, 0x3C, 0xC9, 0xF1, 0x98, 0xD6, 0x61}[counter];
   } else {
     // Undefined CAN message, CRC check expected to fail
   }
