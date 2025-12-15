@@ -31,6 +31,7 @@ class CarController(CarControllerBase):
     self.eps_timer_soft_disable_alert = False
     self.hca_frame_timer_running = 0
     self.hca_frame_same_torque = 0
+    self.hold_release_frames = 0
 
   def update(self, CC, CS, now_nanos):
     actuators = CC.actuators
@@ -89,6 +90,16 @@ class CarController(CarControllerBase):
         accel = float(np.clip(actuators.accel, self.CCP.ACCEL_MIN, self.CCP.ACCEL_MAX) if CC.longActive else 0)
         stopping = actuators.longControlState == LongCtrlState.stopping
         starting = actuators.longControlState == LongCtrlState.pid and (CS.esp_hold_confirmation or CS.out.vEgo < self.CP.vEgoStopping)
+
+        # ACC type 1: detect ESP hold release and send anfahren to properly acknowledge the release
+        if CS.esp_hold_release:
+          self.hold_release_frames = 10  # ~0.2 seconds at 50Hz
+        if CS.acc_type == 1 and self.hold_release_frames > 0:
+          stopping = False
+          starting = True
+          accel = 0.0
+          self.hold_release_frames -= 1
+
         can_sends.extend(self.CCS.create_acc_accel_control(self.packer_pt, self.CAN.pt, CS.acc_type, CC.longActive, accel,
                                                            acc_control, stopping, starting, CS.esp_hold_confirmation))
 
