@@ -93,8 +93,9 @@ class CarController(CarControllerBase):
                                                            acc_control, stopping, starting, CS.esp_hold_confirmation))
 
         # spoof ESP_21 with ESP_Haltebestaetigung=0 for ACC type 1 to prevent hold fault
+        # send on bus 0 (powertrain side) so drivetrain coordinator sees the spoofed value
         if CS.acc_type == 1:
-          can_sends.append(self.CCS.create_esp_hold_spoof(self.packer_pt, self.CAN.cam, CS.esp_stock_values))
+          can_sends.append(self.CCS.create_esp_hold_spoof(self.packer_pt, self.CAN.pt, CS.esp_stock_values))
 
       #if self.aeb_available:
       #  if self.frame % self.CCP.AEB_CONTROL_STEP == 0:

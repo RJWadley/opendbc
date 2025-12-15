@@ -11,7 +11,7 @@ static safety_config volkswagen_mqb_init(uint16_t param) {
 
   static const CanMsg VOLKSWAGEN_MQB_LONG_TX_MSGS[] = {{MSG_HCA_01, 0, 8, .check_relay = true}, {MSG_LDW_02, 0, 8, .check_relay = true}, {MSG_LH_EPS_03, 2, 8, .check_relay = true},
                                                        {MSG_ACC_02, 0, 8, .check_relay = true}, {MSG_ACC_06, 0, 8, .check_relay = true}, {MSG_ACC_07, 0, 8, .check_relay = true},
-                                                       {MSG_ESP_21, 2, 8, .check_relay = true}};  // ESP hold spoof for ACC type 1
+                                                       {MSG_ESP_21, 0, 8, .check_relay = true}};  // ESP hold spoof for ACC type 1 (bus 0 for drivetrain coordinator)
 
   static RxCheck volkswagen_mqb_rx_checks[] = {
     {.msg = {{MSG_ESP_19, 0, 8, 100U, .ignore_checksum = true, .ignore_counter = true, .ignore_quality_flag = true}, { 0 }, { 0 }}},
