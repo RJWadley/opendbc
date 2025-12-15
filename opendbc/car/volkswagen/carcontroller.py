@@ -85,11 +85,13 @@ class CarController(CarControllerBase):
 
     if self.CP.openpilotLongitudinalControl:
       if self.frame % self.CCP.ACC_CONTROL_STEP == 0:
-        acc_control = self.CCS.acc_control_value(CS.out.cruiseState.available, CS.out.accFaulted, CC.longActive)
-        accel = float(np.clip(actuators.accel, self.CCP.ACCEL_MIN, self.CCP.ACCEL_MAX) if CC.longActive else 0)
-        stopping = actuators.longControlState == LongCtrlState.stopping
-        starting = actuators.longControlState == LongCtrlState.pid and (CS.esp_hold_confirmation or CS.out.vEgo < self.CP.vEgoStopping)
-        can_sends.extend(self.CCS.create_acc_accel_control(self.packer_pt, self.CAN.pt, CS.acc_type, CC.longActive, accel,
+        # if ESP reports SRBM unavailable, stop sending accel commands to avoid a forced disengagement
+        long_active = CC.longActive and not CS.esc_srbm_unavailable
+        acc_control = self.CCS.acc_control_value(CS.out.cruiseState.available, CS.out.accFaulted, long_active)
+        accel = float(np.clip(actuators.accel, self.CCP.ACCEL_MIN, self.CCP.ACCEL_MAX) if long_active else 0)
+        stopping = actuators.longControlState == LongCtrlState.stopping and not CS.esc_srbm_unavailable
+        starting = actuators.longControlState == LongCtrlState.pid and (CS.esp_hold_confirmation or CS.out.vEgo < self.CP.vEgoStopping) and not CS.esc_srbm_unavailable
+        can_sends.extend(self.CCS.create_acc_accel_control(self.packer_pt, self.CAN.pt, CS.acc_type, long_active, accel,
                                                            acc_control, stopping, starting, CS.esp_hold_confirmation))
 
       #if self.aeb_available:
