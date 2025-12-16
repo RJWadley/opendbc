@@ -89,7 +89,8 @@ class CarController(CarControllerBase):
 
     if self.CP.openpilotLongitudinalControl:
       if self.frame % self.CCP.ACC_CONTROL_STEP == 0:
-        long_active = False if (CS.acc_type == 1 and CS.out.brakePressed) else CC.longActive # acc type 1 is a bit strict
+        force_disable = CS.acc_type == 1 and (CS.out.brakePressed or self.standstill_frames > 60)
+        long_active = False if force_disable else CC.longActive # acc type 1 is a bit strict
         acc_control = self.CCS.acc_control_value(CS.out.cruiseState.available, CS.out.accFaulted, long_active)
         accel = float(np.clip(actuators.accel, self.CCP.ACCEL_MIN, self.CCP.ACCEL_MAX) if long_active else 0)
         stopping = actuators.longControlState == LongCtrlState.stopping
