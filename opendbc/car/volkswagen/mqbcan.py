@@ -5,6 +5,7 @@ from opendbc.car.crc import CRC8H2F
 
 class ResetSignal(IntEnum):
   NONE = 0
+  STANDSTILL = 1
   QUICK_RESET = 2
   HILL_RESET = 3
 
@@ -105,6 +106,10 @@ def create_acc_accel_control(packer, bus, acc_type, acc_enabled, accel, acc_cont
   acc_06_stopping = stopping
   acc_07_stopping = stopping
 
+  if reset_signal == ResetSignal.STANDSTILL:
+    # keep brake pressure high to prevent audible feedback from ESP
+    if (accel < 0):
+      accel = -2.0
   if reset_signal == ResetSignal.QUICK_RESET:
     # attempt to cycle the ESP hold w/ a one tick start request
     acc_06_starting = True

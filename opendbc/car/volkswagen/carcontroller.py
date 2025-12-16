@@ -109,11 +109,12 @@ class CarController(CarControllerBase):
           if not CS.esp_hold_confirmation and self.standstill_frames > 10:
             self.standstill_frames = 0
           if CS.esp_vEgo_confirmation == 0:
+            self.standstill_frames += 1
+            reset_signal = ResetSignal.STANDSTILL
             if (self.standstill_frames % 10 == 0 and self.standstill_frames >= 10):
               reset_signal = ResetSignal.QUICK_RESET
             elif (self.standstill_frames > 12):
               reset_signal = ResetSignal.HILL_RESET
-            self.standstill_frames += 1
 
         can_sends.extend(self.CCS.create_acc_accel_control(self.packer_pt, self.CAN.pt, CS.acc_type, long_active, accel,
                                                            acc_control, stopping, starting, CS.esp_hold_confirmation,
