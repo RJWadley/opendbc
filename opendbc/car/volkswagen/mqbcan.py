@@ -96,7 +96,7 @@ def acc_hud_status_value(main_switch_on, acc_faulted, long_active):
 
 
 def create_acc_accel_control(packer, bus, acc_type, acc_enabled, accel, acc_control, stopping, starting, esp_hold,
-                             hill_hold_state=ResetSignal.NONE):
+                             reset_signal):
   commands = []
 
   # apply hill hold state overrides
@@ -105,14 +105,14 @@ def create_acc_accel_control(packer, bus, acc_type, acc_enabled, accel, acc_cont
   acc_06_stopping = stopping
   acc_07_stopping = stopping
 
-  if hill_hold_state == ResetSignal.QUICK_RESET:
+  if reset_signal == ResetSignal.QUICK_RESET:
     # attempt to cycle the ESP hold w/ a one tick start request
     acc_06_starting = True
     acc_06_stopping = False
     accel = max(accel, 0.01)
     acc_07_starting = True
     acc_07_stopping = False
-  elif hill_hold_state == ResetSignal.HILL_RESET:
+  elif reset_signal == ResetSignal.HILL_RESET:
     # split: motor gets small gas request, ESP keeps holding brakes
     # this is to persuade ESP that we won't roll back if it releases
     acc_06_starting = True

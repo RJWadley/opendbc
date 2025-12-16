@@ -16,6 +16,7 @@ class CarState(CarStateBase):
     self.CCP = CarControllerParams(CP)
     self.button_states = {button.event_type: False for button in self.CCP.BUTTONS}
     self.esp_hold_confirmation = False
+    self.esp_vEgo_confirmation = 0
     self.upscale_lead_car_signal = False
     self.eps_stock_values = False
     self.acc_type = 0
@@ -103,6 +104,7 @@ class CarState(CarStateBase):
 
       self.acc_type = ext_cp.vl["ACC_06"]["ACC_Typ"]
       self.esp_hold_confirmation = bool(pt_cp.vl["ESP_21"]["ESP_Haltebestaetigung"])
+      self.esp_vEgo_confirmation = pt_cp.vl["ESP_21"]["ESP_v_Signal"]
 
       wegimpulse_sum = (pt_cp.vl["ESP_10"]["ESP_Wegimpuls_VL"] +
                         pt_cp.vl["ESP_10"]["ESP_Wegimpuls_VR"] +

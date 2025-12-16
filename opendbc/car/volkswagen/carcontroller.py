@@ -89,31 +89,30 @@ class CarController(CarControllerBase):
 
     if self.CP.openpilotLongitudinalControl:
       if self.frame % self.CCP.ACC_CONTROL_STEP == 0:
-        force_disable = CS.acc_type == 1 and (CS.out.brakePressed or self.standstill_frames > 60)
-        long_active = False if force_disable else CC.longActive # acc type 1 is a bit strict
+        standstill_reset_car = self.CCS == mqbcan and CS.acc_type == 1
+        force_disable = standstill_reset_car and (CS.out.brakePressed or self.standstill_frames > 60)
+        reset_signal = ResetSignal.NONE
+
+        long_active = False if force_disable else CC.longActive
         acc_control = self.CCS.acc_control_value(CS.out.cruiseState.available, CS.out.accFaulted, long_active)
         accel = float(np.clip(actuators.accel, self.CCP.ACCEL_MIN, self.CCP.ACCEL_MAX) if long_active else 0)
         stopping = actuators.longControlState == LongCtrlState.stopping
         starting = actuators.longControlState == LongCtrlState.pid and (CS.esp_hold_confirmation or CS.out.vEgo < self.CP.vEgoStopping)
-        reset_signal = ResetSignal.NONE
 
-        # hill hold state machine for MQB ACC type 1
-        if CS.acc_type == 1 and long_active:
-
-          # two reset conditions:
-          # A - wegimpulse changes (indicating wheel movement)
-          # B - ESP hold released during one of our reset pulses
+        # standstill timer reset for MQB ACC type 1
+        # two reset conditions:
+        # A - wegimpulse changes (indicating any wheel activity)
+        # B - ESP hold is released during one of our reset pulses (disabling does not reset)
+        if standstill_reset_car and long_active:
           if CS.wegimpulse_changed:
             self.standstill_frames = 0
           if not CS.esp_hold_confirmation and self.standstill_frames > 10:
             self.standstill_frames = 0
-
-          if CS.out.standstill:
+          if CS.esp_vEgo_confirmation == 0:
             if (self.standstill_frames % 10 == 0 and self.standstill_frames >= 10):
               reset_signal = ResetSignal.QUICK_RESET
             elif (self.standstill_frames > 12):
               reset_signal = ResetSignal.HILL_RESET
-
             self.standstill_frames += 1
 
         can_sends.extend(self.CCS.create_acc_accel_control(self.packer_pt, self.CAN.pt, CS.acc_type, long_active, accel,
