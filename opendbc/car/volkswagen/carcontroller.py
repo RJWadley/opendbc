@@ -104,13 +104,13 @@ class CarController(CarControllerBase):
           # B - ESP hold released during one of our reset pulses
           if CS.wegimpulse_changed:
             self.standstill_frames = 0
-          if not CS.esp_hold_confirmation and self.standstill_frames > 12:
+          if not CS.esp_hold_confirmation and self.standstill_frames > 10:
             self.standstill_frames = 0
 
           if CS.out.standstill:
             if (self.standstill_frames % 10 == 0 and self.standstill_frames >= 10):
               reset_signal = ResetSignal.QUICK_RESET
-            elif (self.standstill_frames > 10):
+            elif (self.standstill_frames > 12):
               reset_signal = ResetSignal.HILL_RESET
 
             self.standstill_frames += 1
