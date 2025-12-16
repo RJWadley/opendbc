@@ -19,6 +19,8 @@ class CarState(CarStateBase):
     self.upscale_lead_car_signal = False
     self.eps_stock_values = False
     self.acc_type = 0
+    self.wegimpulse_sum_last = 0
+    self.wegimpulse_changed = False
 
   def update_button_enable(self, buttonEvents: list[structs.CarState.ButtonEvent]):
     if not self.CP.pcmCruise:
@@ -101,6 +103,15 @@ class CarState(CarStateBase):
 
       self.acc_type = ext_cp.vl["ACC_06"]["ACC_Typ"]
       self.esp_hold_confirmation = bool(pt_cp.vl["ESP_21"]["ESP_Haltebestaetigung"])
+
+      wegimpulse_sum = (pt_cp.vl["ESP_10"]["ESP_Wegimpuls_VL"] +
+                        pt_cp.vl["ESP_10"]["ESP_Wegimpuls_VR"] +
+                        pt_cp.vl["ESP_10"]["ESP_Wegimpuls_HL"] +
+                        pt_cp.vl["ESP_10"]["ESP_Wegimpuls_HR"])
+      self.wegimpulse_changed = (wegimpulse_sum // 2) != (self.wegimpulse_sum_last // 2)
+      self.wegimpulse_sum_last = wegimpulse_sum
+
+
       acc_limiter_mode = ext_cp.vl["ACC_02"]["ACC_Gesetzte_Zeitluecke"] == 0
       speed_limiter_mode = bool(pt_cp.vl["TSK_06"]["TSK_Limiter_ausgewaehlt"])
 

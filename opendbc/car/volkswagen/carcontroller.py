@@ -5,6 +5,7 @@ from opendbc.car.lateral import apply_driver_steer_torque_limits
 from opendbc.car.common.conversions import Conversions as CV
 from opendbc.car.interfaces import CarControllerBase
 from opendbc.car.volkswagen import mlbcan, mqbcan, pqcan
+from opendbc.car.volkswagen.mqbcan import ResetSignal
 from opendbc.car.volkswagen.values import CanBus, CarControllerParams, VolkswagenFlags
 
 VisualAlert = structs.CarControl.HUDControl.VisualAlert
@@ -31,6 +32,9 @@ class CarController(CarControllerBase):
     self.eps_timer_soft_disable_alert = False
     self.hca_frame_timer_running = 0
     self.hca_frame_same_torque = 0
+
+    # hill hold state machine (MQB ACC type 1)
+    self.standstill_frames = 0
 
   def update(self, CC, CS, now_nanos):
     actuators = CC.actuators
@@ -85,12 +89,35 @@ class CarController(CarControllerBase):
 
     if self.CP.openpilotLongitudinalControl:
       if self.frame % self.CCP.ACC_CONTROL_STEP == 0:
-        acc_control = self.CCS.acc_control_value(CS.out.cruiseState.available, CS.out.accFaulted, CC.longActive)
-        accel = float(np.clip(actuators.accel, self.CCP.ACCEL_MIN, self.CCP.ACCEL_MAX) if CC.longActive else 0)
+        long_active = False if (CS.acc_type == 1 and CS.out.brakePressed) else CC.longActive # acc type 1 is a bit strict
+        acc_control = self.CCS.acc_control_value(CS.out.cruiseState.available, CS.out.accFaulted, long_active)
+        accel = float(np.clip(actuators.accel, self.CCP.ACCEL_MIN, self.CCP.ACCEL_MAX) if long_active else 0)
         stopping = actuators.longControlState == LongCtrlState.stopping
         starting = actuators.longControlState == LongCtrlState.pid and (CS.esp_hold_confirmation or CS.out.vEgo < self.CP.vEgoStopping)
-        can_sends.extend(self.CCS.create_acc_accel_control(self.packer_pt, self.CAN.pt, CS.acc_type, CC.longActive, accel,
-                                                           acc_control, stopping, starting, CS.esp_hold_confirmation))
+        reset_signal = ResetSignal.NONE
+
+        # hill hold state machine for MQB ACC type 1
+        if CS.acc_type == 1 and long_active:
+
+          # two reset conditions:
+          # A - wegimpulse changes (indicating wheel movement)
+          # B - ESP hold released during one of our reset pulses
+          if CS.wegimpulse_changed:
+            self.standstill_frames = 0
+          if not CS.esp_hold_confirmation and self.standstill_frames > 12:
+            self.standstill_frames = 0
+
+          if CS.out.standstill:
+            if (self.standstill_frames % 10 == 0 and self.standstill_frames >= 10):
+              reset_signal = ResetSignal.QUICK_RESET
+            elif (self.standstill_frames > 10):
+              reset_signal = ResetSignal.HILL_RESET
+
+            self.standstill_frames += 1
+
+        can_sends.extend(self.CCS.create_acc_accel_control(self.packer_pt, self.CAN.pt, CS.acc_type, long_active, accel,
+                                                           acc_control, stopping, starting, CS.esp_hold_confirmation,
+                                                           reset_signal))
 
       #if self.aeb_available:
       #  if self.frame % self.CCP.AEB_CONTROL_STEP == 0:

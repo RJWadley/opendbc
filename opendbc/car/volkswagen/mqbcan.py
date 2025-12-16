@@ -1,5 +1,12 @@
+from enum import IntEnum
+
 from opendbc.car.crc import CRC8H2F
 
+
+class ResetSignal(IntEnum):
+  NONE = 0
+  QUICK_RESET = 2
+  HILL_RESET = 3
 
 def create_steering_control(packer, bus, apply_torque, lkas_enabled):
   values = {
@@ -88,8 +95,31 @@ def acc_hud_status_value(main_switch_on, acc_faulted, long_active):
   return acc_control_value(main_switch_on, acc_faulted, long_active)
 
 
-def create_acc_accel_control(packer, bus, acc_type, acc_enabled, accel, acc_control, stopping, starting, esp_hold):
+def create_acc_accel_control(packer, bus, acc_type, acc_enabled, accel, acc_control, stopping, starting, esp_hold,
+                             hill_hold_state=ResetSignal.NONE):
   commands = []
+
+  # apply hill hold state overrides
+  acc_06_starting = starting
+  acc_07_starting = starting
+  acc_06_stopping = stopping
+  acc_07_stopping = stopping
+
+  if hill_hold_state == ResetSignal.QUICK_RESET:
+    # attempt to cycle the ESP hold w/ a one tick start request
+    acc_06_starting = True
+    acc_06_stopping = False
+    accel = max(accel, 0.01)
+    acc_07_starting = True
+    acc_07_stopping = False
+  elif hill_hold_state == ResetSignal.HILL_RESET:
+    # split: motor gets small gas request, ESP keeps holding brakes
+    # this is to persuade ESP that we won't roll back if it releases
+    acc_06_starting = True
+    acc_06_stopping = False
+    accel = max(accel, 0.01)
+    acc_07_starting = False
+    acc_07_stopping = True
 
   acc_06_values = {
     "ACC_Typ": acc_type,
@@ -100,28 +130,28 @@ def create_acc_accel_control(packer, bus, acc_type, acc_enabled, accel, acc_cont
     "ACC_zul_Regelabw_oben": 0.2,  # TODO: dynamic adjustment of comfort-band
     "ACC_neg_Sollbeschl_Grad_02": 4.0 if acc_enabled else 0,  # TODO: dynamic adjustment of jerk limits
     "ACC_pos_Sollbeschl_Grad_02": 4.0 if acc_enabled else 0,  # TODO: dynamic adjustment of jerk limits
-    "ACC_Anfahren": starting,
-    "ACC_Anhalten": stopping,
+    "ACC_Anfahren": acc_06_starting if acc_enabled else False,
+    "ACC_Anhalten": acc_06_stopping if acc_enabled else False,
   }
   commands.append(packer.make_can_msg("ACC_06", bus, acc_06_values))
 
-  if starting:
+  if acc_07_starting:
     acc_hold_type = 4  # hold release / startup
   elif esp_hold:
     acc_hold_type = 3  # hold standby
-  elif stopping:
+  elif acc_07_stopping:
     acc_hold_type = 1  # hold request
   else:
     acc_hold_type = 0
 
   acc_07_values = {
-    "ACC_Anhalteweg": 0.3 if stopping else 20.46,  # Distance to stop (stopping coordinator handles terminal roll-out)
+    "ACC_Anhalteweg": 0.3 if acc_07_stopping else 20.46,  # Distance to stop (stopping coordinator handles terminal roll-out)
     "ACC_Freilauf_Info": 2 if acc_enabled else 0,
     "ACC_Folgebeschl": 3.02,  # Not using secondary controller accel unless and until we understand its impact
     "ACC_Sollbeschleunigung_02": accel if acc_enabled else 3.01,
     "ACC_Anforderung_HMS": acc_hold_type,
-    "ACC_Anfahren": starting,
-    "ACC_Anhalten": stopping,
+    "ACC_Anfahren": acc_07_starting if acc_enabled else False,
+    "ACC_Anhalten": acc_07_stopping if acc_enabled else False,
   }
   commands.append(packer.make_can_msg("ACC_07", bus, acc_07_values))
 
