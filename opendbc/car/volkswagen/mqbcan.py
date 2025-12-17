@@ -130,8 +130,8 @@ def create_acc_accel_control(packer, bus, acc_type, acc_enabled, accel, acc_cont
     "ACC_zul_Regelabw_oben": 0.2,  # TODO: dynamic adjustment of comfort-band
     "ACC_neg_Sollbeschl_Grad_02": 4.0 if acc_enabled else 0,  # TODO: dynamic adjustment of jerk limits
     "ACC_pos_Sollbeschl_Grad_02": 4.0 if acc_enabled else 0,  # TODO: dynamic adjustment of jerk limits
-    "ACC_Anfahren": acc_06_starting if acc_enabled else False,
-    "ACC_Anhalten": acc_06_stopping if acc_enabled else False,
+    "ACC_Anfahren": acc_06_starting,
+    "ACC_Anhalten": acc_06_stopping,
   }
   commands.append(packer.make_can_msg("ACC_06", bus, acc_06_values))
 
