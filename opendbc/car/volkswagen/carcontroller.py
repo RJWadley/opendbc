@@ -101,14 +101,14 @@ class CarController(CarControllerBase):
 
         # standstill timer reset for MQB ACC type 1
         # two reset conditions:
-        # A - wegimpulse changes (indicating any wheel activity)
+        # A - wegimpulse changes after ESP was stopped (indicates rollaway)
         # B - ESP hold is released during one of our reset pulses (disabling does not reset)
         if standstill_reset_car and long_active:
-          if CS.wegimpulse_changed:
+          if CS.wegimpulse_changed and CS.esp_vEgo_confirmation == 0:
             self.standstill_frames = 0
-          if not CS.esp_hold_confirmation and self.standstill_frames > 10:
+          elif not CS.esp_hold_confirmation and self.standstill_frames > 10:
             self.standstill_frames = 0
-          if CS.esp_vEgo_confirmation == 0:
+          elif CS.esp_vEgo_confirmation == 0:
             self.standstill_frames += 1
             if (self.standstill_frames % 10 == 0 and self.standstill_frames >= 10):
               reset_signal = ResetSignal.QUICK_RESET
