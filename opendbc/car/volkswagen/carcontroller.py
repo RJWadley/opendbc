@@ -110,7 +110,6 @@ class CarController(CarControllerBase):
             self.standstill_frames = 0
           if CS.esp_vEgo_confirmation == 0:
             self.standstill_frames += 1
-            reset_signal = ResetSignal.STANDSTILL
             if (self.standstill_frames % 10 == 0 and self.standstill_frames >= 10):
               reset_signal = ResetSignal.QUICK_RESET
             elif (self.standstill_frames > 12):
