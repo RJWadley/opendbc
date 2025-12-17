@@ -150,8 +150,8 @@ def create_acc_accel_control(packer, bus, acc_type, acc_enabled, accel, acc_cont
     "ACC_Folgebeschl": 3.02,  # Not using secondary controller accel unless and until we understand its impact
     "ACC_Sollbeschleunigung_02": accel if acc_enabled else 3.01,
     "ACC_Anforderung_HMS": acc_hold_type,
-    "ACC_Anfahren": acc_07_starting if acc_enabled else False,
-    "ACC_Anhalten": acc_07_stopping if acc_enabled else False,
+    "ACC_Anfahren": acc_07_starting,
+    "ACC_Anhalten": acc_07_stopping,
   }
   commands.append(packer.make_can_msg("ACC_07", bus, acc_07_values))
 

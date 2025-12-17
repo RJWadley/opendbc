@@ -88,7 +88,7 @@ class CarController(CarControllerBase):
     if self.CP.openpilotLongitudinalControl:
       if self.frame % self.CCP.ACC_CONTROL_STEP == 0:
         standstill_reset_car = self.CCS == mqbcan and CS.acc_type == 1
-        force_disable = standstill_reset_car and (CS.out.brakePressed or self.standstill_frames > 60)
+        force_disable = standstill_reset_car and self.standstill_frames > 60
         reset_signal = ResetSignal.NONE
 
         long_active = False if force_disable else CC.longActive
@@ -101,14 +101,16 @@ class CarController(CarControllerBase):
 
         # standstill timer reset for MQB ACC type 1
         # two reset conditions:
-        # A - wegimpulse changes after ESP was stopped (indicates rollaway)
+        # A - wegimpulse changes while no hold is active
         # B - ESP hold is released during one of our reset pulses (disabling does not reset)
         if standstill_reset_car and long_active:
-          if CS.wegimpulse_changed and CS.esp_vEgo_confirmation == 0:
+          if CS.wegimpulse_changed and not CS.esp_hold_confirmation:
             self.standstill_frames = 0
+          elif not CS.esp_hold_confirmation and self.standstill_frames > 30:
+            self.standstill_frames = 12 # partial reset (just to prevent engine ping-pong)
           elif not CS.esp_hold_confirmation and self.standstill_frames > 10:
             self.standstill_frames = 0
-          elif CS.esp_vEgo_confirmation == 0:
+          elif CS.out.standstill:
             self.standstill_frames += 1
             if (self.standstill_frames % 10 == 0 and self.standstill_frames >= 10):
               reset_signal = ResetSignal.QUICK_RESET
