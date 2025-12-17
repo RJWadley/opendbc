@@ -88,7 +88,7 @@ class CarController(CarControllerBase):
     if self.CP.openpilotLongitudinalControl:
       if self.frame % self.CCP.ACC_CONTROL_STEP == 0:
         standstill_reset_car = self.CCS == mqbcan and CS.acc_type == 1
-        force_disable = (CS.out.accFaulted) or (standstill_reset_car and self.standstill_frames > 50)
+        force_disable = (CS.out.accFaulted) or (standstill_reset_car and self.standstill_frames >= 50)
         reset_signal = ResetSignal.NONE
 
         long_active = False if force_disable else CC.longActive
