@@ -94,7 +94,7 @@ class CarController(CarControllerBase):
         long_active = False if force_disable else CC.longActive
         acc_control = self.CCS.acc_control_value(CS.out.cruiseState.available, CS.out.accFaulted, long_active)
         accel = float(np.clip(actuators.accel, self.CCP.ACCEL_MIN, self.CCP.ACCEL_MAX) if long_active else 0)
-        stopping = actuators.longControlState == LongCtrlState.stopping
+        stopping = actuators.longControlState == LongCtrlState.stopping and not CS.out.brakePressed
         starting = actuators.longControlState == LongCtrlState.pid and (CS.esp_hold_confirmation or CS.out.vEgo < self.CP.vEgoStopping)
 
         # standstill timer reset for MQB ACC type 1
