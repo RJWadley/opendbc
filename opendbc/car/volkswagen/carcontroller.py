@@ -88,7 +88,7 @@ class CarController(CarControllerBase):
     if self.CP.openpilotLongitudinalControl:
       if self.frame % self.CCP.ACC_CONTROL_STEP == 0:
         standstill_reset_car = self.CCS == mqbcan and CS.acc_type == 1
-        force_disable = (CS.out.accFaulted) or (standstill_reset_car and self.standstill_frames > 60)
+        force_disable = (CS.out.accFaulted) or (standstill_reset_car and self.standstill_frames > 50)
         reset_signal = ResetSignal.NONE
 
         long_active = False if force_disable else CC.longActive
@@ -102,15 +102,15 @@ class CarController(CarControllerBase):
         # standstill timer reset for MQB ACC type 1
         # two reset conditions:
         # A - wegimpulse changes while no hold is active
-        # B - ESP hold is released during one of our reset pulses (disabling does not reset)
+        # B - ESP hold is released during one of our reset pulses (note: disabling does not reset)
+        # on steeper hills, we reset to partway through the sequence to avoid excessive RPM ping-pong
         if standstill_reset_car and long_active:
-          if CS.wegimpulse_changed and not CS.esp_hold_confirmation:
-            self.standstill_frames = 0
-          elif not CS.esp_hold_confirmation and self.standstill_frames > 30:
-            self.standstill_frames = 12 # partial reset (just to prevent engine ping-pong)
-          elif not CS.esp_hold_confirmation and self.standstill_frames > 10:
-            self.standstill_frames = 0
-          elif CS.out.standstill:
+          late_reset = self.standstill_frames > 25
+          if CS.wegimpulse_changed and not CS.esp_hold_confirmation: # A
+            self.standstill_frames = 12 if late_reset else 0
+          elif not CS.esp_hold_confirmation and self.standstill_frames > 10: # B
+            self.standstill_frames = 12 if late_reset else 0
+          elif CS.esp_hold_confirmation:
             self.standstill_frames += 1
             if (self.standstill_frames % 10 == 0 and self.standstill_frames >= 10):
               reset_signal = ResetSignal.QUICK_RESET
