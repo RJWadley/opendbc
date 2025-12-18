@@ -91,35 +91,43 @@ class CarController(CarControllerBase):
         reset_signal = ResetSignal.NONE
         force_steep_hill_disable = False
         standstill_car_is_braking = is_standstill_reset_car and CS.out.brakePressed
-        in_steep_hill_mode = self.standstill_frames > 50
+        in_steep_hill_mode = self.standstill_frames >= 50
 
         stopping = actuators.longControlState == LongCtrlState.stopping
         starting = actuators.longControlState == LongCtrlState.pid and (CS.esp_hold_confirmation or CS.out.vEgo < self.CP.vEgoStopping)
 
         # standstill timer for MQB ACC type 1
-        # reset conditions:
-        # A - wegimpulse changes while no hold is active (car moved out of standstill)
-        # B - ESP hold released during normal reset sequence (our reset worked)
+        # MQB acc type 1 will fault if the ESP holds too long, so we need to track it's timer and attempt to cycle it as needed.
+        # on flat ground or moderate hills, we can cycle the ESP via a quick pulse of start request followed by a stop request
+        # on very steep hills, we ignore the ESP entirely and rely on other systems to maintain the hold
+        # there are two scenarios that can reset the ESP timer:
+        # A - wegimpulse changes while no hold is active, i.e. the car moved
+        # B - ESP hold released during normal reset sequence, i.e. we successfully cycled the ESP
         if is_standstill_reset_car:
-          # A: car moved out of standstill - full reset (can trigger even when inactive)
+          # A: car moved. this can always safely reset the timer
           if CS.wegimpulse_changed and not CS.esp_hold_confirmation:
             self.standstill_frames = 0
-          # B: hold released during normal sequence - full reset
-          # not valid in steep hill mode (we've exhausted the quick reset strategy)
+          # B: hold released in response to a successful ESP cycle
+          # this is not valid in steep hill mode as disengaging the ESP does not reset the timer
           elif CC.longActive and not in_steep_hill_mode and not CS.esp_hold_confirmation and self.standstill_frames > 10:
             self.standstill_frames = 0
-          # counting and signaling
-          elif CC.longActive and CS.esp_hold_confirmation:
+
+          # we increment when the ESP is holding or when we're in steep hill mode
+          elif CC.longActive and (CS.esp_hold_confirmation or in_steep_hill_mode):
             self.standstill_frames += 1
-            if self.standstill_frames > 50:
-              if self.standstill_frames % 10 == 0:
-                force_steep_hill_disable = True # avoid check engine light
-              else:
-                reset_signal = ResetSignal.STEEP_HILL_RESET
-            elif self.standstill_frames % 10 == 0:
-              reset_signal = ResetSignal.QUICK_RESET
+
+          if CC.longActive and self.standstill_frames >= 50:
+            # steep hill mode, disengage every 10 frames to prevent check engine light
+            if self.standstill_frames % 10 == 0:
+              force_steep_hill_disable = True
+            else:
+              reset_signal = ResetSignal.ALTERNATE_HOLD
+          elif CC.longActive and CS.esp_hold_confirmation:
+            # normal mode, attempt a reset every 10 frames, increase torque if our first attempt fails
+            if self.standstill_frames % 10 == 0 and self.standstill_frames >= 10:
+              reset_signal = ResetSignal.ATTEMPT_RESET
             elif self.standstill_frames > 12:
-              reset_signal = ResetSignal.HILL_RESET
+              reset_signal = ResetSignal.INCREASE_TORQUE
 
         force_disable = CS.out.accFaulted or standstill_car_is_braking or force_steep_hill_disable
         long_active = False if force_disable else CC.longActive

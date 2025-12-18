@@ -5,9 +5,9 @@ from opendbc.car.crc import CRC8H2F
 
 class ResetSignal(IntEnum):
   NONE = 0
-  QUICK_RESET = 2
-  HILL_RESET = 3
-  STEEP_HILL_RESET = 4
+  ATTEMPT_RESET = 1
+  INCREASE_TORQUE = 2
+  ALTERNATE_HOLD = 3
 
 def create_steering_control(packer, bus, apply_torque, lkas_enabled):
   values = {
@@ -106,23 +106,24 @@ def create_acc_accel_control(packer, bus, acc_type, acc_enabled, accel, acc_cont
   acc_06_stopping = stopping
   acc_07_stopping = stopping
 
-  if reset_signal == ResetSignal.QUICK_RESET:
+  if reset_signal == ResetSignal.ATTEMPT_RESET:
     # attempt to cycle the ESP hold w/ a one tick start request
     acc_06_starting = True
     acc_06_stopping = False
     accel = max(accel, 0.01)
     acc_07_starting = True
     acc_07_stopping = False
-  elif reset_signal == ResetSignal.HILL_RESET:
-    # split: motor gets small gas request, ESP keeps holding brakes
-    # this is to persuade ESP that we won't roll back if it releases
+  elif reset_signal == ResetSignal.INCREASE_TORQUE:
+    # split signalling: motor/gearbox (acc_06) gets small gas request, ESP (acc_07) keeps holding brakes
+    # this is increase torque without releasing the brakes
     acc_06_starting = True
     acc_06_stopping = False
     accel = max(accel, 0.01)
     acc_07_starting = False
     acc_07_stopping = True
-  elif reset_signal == ResetSignal.STEEP_HILL_RESET:
-    # gentler approach for steep hills after normal reset sequence exhausted
+  elif reset_signal == ResetSignal.ALTERNATE_HOLD:
+    # this alternate approach only works if the vehicle is already stopped
+    # sometimes the car may decide to roll forward anyway, in which case the ESP timer will reset and the whole process restarts
     acc_06_starting = True
     acc_06_stopping = False
     accel = max(accel, 0)
