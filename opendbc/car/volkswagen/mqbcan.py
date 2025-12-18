@@ -7,6 +7,7 @@ class ResetSignal(IntEnum):
   NONE = 0
   QUICK_RESET = 2
   HILL_RESET = 3
+  STEEP_HILL_RESET = 4
 
 def create_steering_control(packer, bus, apply_torque, lkas_enabled):
   values = {
@@ -120,6 +121,13 @@ def create_acc_accel_control(packer, bus, acc_type, acc_enabled, accel, acc_cont
     accel = max(accel, 0.01)
     acc_07_starting = False
     acc_07_stopping = True
+  elif reset_signal == ResetSignal.STEEP_HILL_RESET:
+    # gentler approach for steep hills after normal reset sequence exhausted
+    acc_06_starting = True
+    acc_06_stopping = False
+    accel = max(accel, 0)
+    acc_07_starting = True
+    acc_07_stopping = False
 
   acc_06_values = {
     "ACC_Typ": acc_type,

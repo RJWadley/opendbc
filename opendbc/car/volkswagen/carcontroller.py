@@ -87,33 +87,44 @@ class CarController(CarControllerBase):
 
     if self.CP.openpilotLongitudinalControl:
       if self.frame % self.CCP.ACC_CONTROL_STEP == 0:
-        standstill_reset_car = self.CCS == mqbcan and CS.acc_type == 1
-        force_disable = (CS.out.accFaulted) or (standstill_reset_car and (self.standstill_frames >= 50 or CS.out.brakePressed))
+        is_standstill_reset_car = self.CCS == mqbcan and CS.acc_type == 1
         reset_signal = ResetSignal.NONE
+        force_steep_hill_disable = False
+        standstill_car_is_braking = is_standstill_reset_car and CS.out.brakePressed
+        in_steep_hill_mode = self.standstill_frames > 50
 
-        long_active = False if force_disable else CC.longActive
-        acc_control = self.CCS.acc_control_value(CS.out.cruiseState.available, CS.out.accFaulted, long_active)
-        accel = float(np.clip(actuators.accel, self.CCP.ACCEL_MIN, self.CCP.ACCEL_MAX) if long_active else 0)
         stopping = actuators.longControlState == LongCtrlState.stopping
         starting = actuators.longControlState == LongCtrlState.pid and (CS.esp_hold_confirmation or CS.out.vEgo < self.CP.vEgoStopping)
 
-        # standstill timer reset for MQB ACC type 1
-        # two reset conditions:
-        # A - wegimpulse changes while no hold is active
-        # B - ESP hold is released during one of our reset pulses (note: disabling does not reset)
-        # on steeper hills, we reset to partway through the sequence to avoid excessive RPM ping-pong
-        if standstill_reset_car and long_active:
-          late_reset = self.standstill_frames > 25
-          if CS.wegimpulse_changed and not CS.esp_hold_confirmation: # A
-            self.standstill_frames = 12 if late_reset else 0
-          elif not CS.esp_hold_confirmation and self.standstill_frames > 10: # B
-            self.standstill_frames = 12 if late_reset else 0
-          elif CS.esp_hold_confirmation:
+        # standstill timer for MQB ACC type 1
+        # reset conditions:
+        # A - wegimpulse changes while no hold is active (car moved out of standstill)
+        # B - ESP hold released during normal reset sequence (our reset worked)
+        if is_standstill_reset_car:
+          # A: car moved out of standstill - full reset (can trigger even when inactive)
+          if CS.wegimpulse_changed and not CS.esp_hold_confirmation:
+            self.standstill_frames = 0
+          # B: hold released during normal sequence - full reset
+          # not valid in steep hill mode (we've exhausted the quick reset strategy)
+          elif CC.longActive and not in_steep_hill_mode and not CS.esp_hold_confirmation and self.standstill_frames > 10:
+            self.standstill_frames = 0
+          # counting and signaling
+          elif CC.longActive and CS.esp_hold_confirmation:
             self.standstill_frames += 1
-            if (self.standstill_frames % 10 == 0 and self.standstill_frames >= 10):
+            if self.standstill_frames > 50:
+              if self.standstill_frames % 10 == 0:
+                force_steep_hill_disable = True # avoid check engine light
+              else:
+                reset_signal = ResetSignal.STEEP_HILL_RESET
+            elif self.standstill_frames % 10 == 0:
               reset_signal = ResetSignal.QUICK_RESET
-            elif (self.standstill_frames > 12):
+            elif self.standstill_frames > 12:
               reset_signal = ResetSignal.HILL_RESET
+
+        force_disable = CS.out.accFaulted or standstill_car_is_braking or force_steep_hill_disable
+        long_active = False if force_disable else CC.longActive
+        acc_control = self.CCS.acc_control_value(CS.out.cruiseState.available, CS.out.accFaulted, long_active)
+        accel = float(np.clip(actuators.accel, self.CCP.ACCEL_MIN, self.CCP.ACCEL_MAX) if long_active else 0)
 
         can_sends.extend(self.CCS.create_acc_accel_control(self.packer_pt, self.CAN.pt, CS.acc_type, long_active, accel,
                                                            acc_control, stopping, starting, CS.esp_hold_confirmation,
