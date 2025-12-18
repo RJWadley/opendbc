@@ -89,9 +89,9 @@ class CarController(CarControllerBase):
       if self.frame % self.CCP.ACC_CONTROL_STEP == 0:
         is_standstill_reset_car = self.CCS == mqbcan and CS.acc_type == 1
         reset_signal = ResetSignal.NONE
-        force_steep_hill_disable = False
         standstill_car_is_braking = is_standstill_reset_car and CS.out.brakePressed
-        in_steep_hill_mode = self.standstill_frames >= 50
+        force_steep_hill_disable = self.standstill_frames == 50
+        in_steep_hill_mode = self.standstill_frames > 50
 
         stopping = actuators.longControlState == LongCtrlState.stopping
         starting = actuators.longControlState == LongCtrlState.pid and (CS.esp_hold_confirmation or CS.out.vEgo < self.CP.vEgoStopping)
@@ -116,12 +116,8 @@ class CarController(CarControllerBase):
           elif CC.longActive and (CS.esp_hold_confirmation or in_steep_hill_mode):
             self.standstill_frames += 1
 
-          if CC.longActive and self.standstill_frames >= 50:
-            # steep hill mode, disengage every 10 frames to prevent check engine light
-            if self.standstill_frames % 10 == 0:
-              force_steep_hill_disable = True
-            else:
-              reset_signal = ResetSignal.ALTERNATE_HOLD
+          if CC.longActive and in_steep_hill_mode:
+            reset_signal = ResetSignal.ALTERNATE_HOLD
           elif CC.longActive and CS.esp_hold_confirmation:
             # normal mode, attempt a reset every 10 frames, increase torque if our first attempt fails
             if self.standstill_frames % 10 == 0 and self.standstill_frames >= 10:
