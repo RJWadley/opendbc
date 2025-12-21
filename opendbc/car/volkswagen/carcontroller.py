@@ -31,6 +31,7 @@ class CarController(CarControllerBase):
     self.eps_timer_soft_disable_alert = False
     self.hca_frame_timer_running = 0
     self.hca_frame_same_torque = 0
+    self.frames_at_standstill = 0
 
   def update(self, CC, CS, now_nanos):
     actuators = CC.actuators
@@ -85,12 +86,26 @@ class CarController(CarControllerBase):
 
     if self.CP.openpilotLongitudinalControl:
       if self.frame % self.CCP.ACC_CONTROL_STEP == 0:
+        needs_cycle = self.CCS == mqbcan and CS.acc_type == 1
+
+        if (CS.out.standstill or CS.esp_hold_confirmation):
+          self.frames_at_standstill += 1
+        else:
+          self.frames_at_standstill = 0
+
+        reset_signal = mqbcan.ResetSignal.NONE
+        if (self.frames_at_standstill > 0 and needs_cycle):
+          if (self.frames_at_standstill > 10 and self.frames_at_standstill % 10 == 0):
+            reset_signal = mqbcan.ResetSignal.CYCLE_AND_TORQUE
+          else:
+            reset_signal = mqbcan.ResetSignal.MAKE_OR_RELEASE_TORQUE
+
         acc_control = self.CCS.acc_control_value(CS.out.cruiseState.available, CS.out.accFaulted, CC.longActive)
         accel = float(np.clip(actuators.accel, self.CCP.ACCEL_MIN, self.CCP.ACCEL_MAX) if CC.longActive else 0)
         stopping = actuators.longControlState == LongCtrlState.stopping
         starting = actuators.longControlState == LongCtrlState.pid and (CS.esp_hold_confirmation or CS.out.vEgo < self.CP.vEgoStopping)
         can_sends.extend(self.CCS.create_acc_accel_control(self.packer_pt, self.CAN.pt, CS.acc_type, CC.longActive, accel,
-                                                           acc_control, stopping, starting, CS.esp_hold_confirmation))
+                                                           acc_control, stopping, starting, CS.esp_hold_confirmation, reset_signal))
 
       #if self.aeb_available:
       #  if self.frame % self.CCP.AEB_CONTROL_STEP == 0:
