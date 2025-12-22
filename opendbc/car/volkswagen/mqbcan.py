@@ -107,7 +107,8 @@ def create_acc_accel_control(packer, bus, acc_type, acc_enabled, accel, acc_cont
   stopping_7 = stopping
   accel_67 = accel
 
-  # engine & gearbox: send starting + zero accel to create or release torque when needed
+  # engine & gearbox: send starting to create or release torque when needed
+  # caller provides hill-compensated accel that's higher on uphills
   if reset_signal == ResetSignal.MAKE_OR_RELEASE_TORQUE or reset_signal == ResetSignal.CYCLE_AND_TORQUE:
     starting_6 = True
     stopping_6 = False
