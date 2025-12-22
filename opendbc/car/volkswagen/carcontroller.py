@@ -1,3 +1,4 @@
+import math
 import numpy as np
 from opendbc.can import CANPacker
 from opendbc.car import Bus, DT_CTRL, structs
@@ -104,6 +105,15 @@ class CarController(CarControllerBase):
 
         acc_control = self.CCS.acc_control_value(CS.out.cruiseState.available, CS.out.accFaulted, long_active)
         accel = float(np.clip(actuators.accel, self.CCP.ACCEL_MIN, self.CCP.ACCEL_MAX) if long_active else 0)
+
+        # hill compensation for reset signals - need more torque on steep uphills
+        if reset_signal != mqbcan.ResetSignal.NONE and len(CC.orientationNED) == 3:
+          GRAVITY = 9.81
+          PITCH_THRESHOLD = 0.05  # ~3 degrees / ~5% grade
+          pitch = CC.orientationNED[1]
+          hill_accel = math.sin(pitch) * GRAVITY if pitch > PITCH_THRESHOLD else 0.0
+          accel = max(accel, hill_accel)
+
         stopping = actuators.longControlState == LongCtrlState.stopping
         starting = actuators.longControlState == LongCtrlState.pid and (CS.esp_hold_confirmation or CS.out.vEgo < self.CP.vEgoStopping)
         can_sends.extend(self.CCS.create_acc_accel_control(self.packer_pt, self.CAN.pt, CS.acc_type, long_active, accel,
