@@ -49,8 +49,7 @@ def create_acc_accel_control(packer, bus, acc_type, acc_enabled, accel, acc_cont
 
 
 def create_acc_hud_control(packer, bus, acc_hud_status, set_speed, lead_distance, distance, steep_grade_warning=False):
-  values = {}
-  return packer.make_can_msg("ACC_02", bus, values)
+  return [packer.make_can_msg("ACC_02", bus, {})]
 
 def volkswagen_mlb_checksum(address: int, sig, d: bytearray) -> int:
   xor_starting_value = {
