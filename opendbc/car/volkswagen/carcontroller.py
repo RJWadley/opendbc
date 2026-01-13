@@ -1,4 +1,3 @@
-import math
 import numpy as np
 from opendbc.can import CANPacker
 from opendbc.car import Bus, DT_CTRL, structs
@@ -10,6 +9,10 @@ from opendbc.car.volkswagen.values import CanBus, CarControllerParams, Volkswage
 
 VisualAlert = structs.CarControl.HUDControl.VisualAlert
 LongCtrlState = structs.CarControl.Actuators.LongControlState
+
+# esp hold will fault after ~65 frames. we stop sending active at this threshold
+# to give margin before the fault occurs
+ESP_HOLD_FAULT_THRESHOLD = 50
 
 
 class CarController(CarControllerBase):
@@ -33,6 +36,9 @@ class CarController(CarControllerBase):
     self.hca_frame_timer_running = 0
     self.hca_frame_same_torque = 0
     self.frames_at_standstill = 0
+    self.esp_hold_frames = 0  # consecutive frames of esp_hold_confirmation
+    self.esp_hold_prev = False
+    self.steep_grade_hold_warning = False
 
   def update(self, CC, CS, now_nanos):
     actuators = CC.actuators
@@ -96,8 +102,32 @@ class CarController(CarControllerBase):
         else:
           self.frames_at_standstill = 0
 
+        # track consecutive frames of esp hold confirmation
+        # a successful reset cycle causes esp_hold_confirmation to drop for 1-2 frames
+        if CS.esp_hold_confirmation:
+          # check if we just got hold confirmation back after a drop (successful reset)
+          if not self.esp_hold_prev:
+            self.esp_hold_frames = 0
+          self.esp_hold_frames += 1
+        else:
+          self.esp_hold_frames = 0
+        self.esp_hold_prev = CS.esp_hold_confirmation
+
+        # if we're approaching the fault threshold without a successful reset, soft-disable
+        # the car will start rolling, which resets our standstill counter and allows re-braking
+        steep_grade_soft_disable = needs_cycle and self.esp_hold_frames >= ESP_HOLD_FAULT_THRESHOLD
+        if steep_grade_soft_disable:
+          long_active = False
+          self.steep_grade_hold_warning = True
+        elif not CS.esp_hold_confirmation:
+          # clear warning when hold is released (car started moving)
+          self.steep_grade_hold_warning = False
+
+        # expose warning state to carstate for event generation
+        CS.steep_grade_hold_warning = self.steep_grade_hold_warning
+
         reset_signal = mqbcan.ResetSignal.NONE
-        if (self.frames_at_standstill > 0 and needs_cycle):
+        if (self.frames_at_standstill > 0 and needs_cycle and not steep_grade_soft_disable):
           if (self.frames_at_standstill > 10 and self.frames_at_standstill % 10 == 0):
             reset_signal = mqbcan.ResetSignal.CYCLE_AND_TORQUE
           else:
@@ -105,14 +135,6 @@ class CarController(CarControllerBase):
 
         acc_control = self.CCS.acc_control_value(CS.out.cruiseState.available, CS.out.accFaulted, long_active)
         accel = float(np.clip(actuators.accel, self.CCP.ACCEL_MIN, self.CCP.ACCEL_MAX) if long_active else 0)
-
-        # hill compensation for reset signals - need more torque on steep uphills
-        if reset_signal != mqbcan.ResetSignal.NONE and len(CC.orientationNED) == 3:
-          GRAVITY = 9.81
-          PITCH_THRESHOLD = 0.05  # ~3 degrees / ~5% grade
-          pitch = CC.orientationNED[1]
-          hill_accel = math.sin(pitch) * GRAVITY if pitch > PITCH_THRESHOLD else 0.0
-          accel = max(accel, hill_accel)
 
         stopping = actuators.longControlState == LongCtrlState.stopping
         starting = actuators.longControlState == LongCtrlState.pid and (CS.esp_hold_confirmation or CS.out.vEgo < self.CP.vEgoStopping)
@@ -143,7 +165,7 @@ class CarController(CarControllerBase):
       # FIXME: Detect clusters with vEgoCluster offsets and apply an identical vCruiseCluster offset
       set_speed = hud_control.setSpeed * CV.MS_TO_KPH
       can_sends.append(self.CCS.create_acc_hud_control(self.packer_pt, self.CAN.pt, acc_hud_status, set_speed,
-                                                       lead_distance, hud_control.leadDistanceBars))
+                                                       lead_distance, hud_control.leadDistanceBars, self.steep_grade_hold_warning))
 
     # **** Stock ACC Button Controls **************************************** #
 

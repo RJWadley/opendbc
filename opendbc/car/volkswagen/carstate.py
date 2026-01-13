@@ -19,6 +19,7 @@ class CarState(CarStateBase):
     self.upscale_lead_car_signal = False
     self.eps_stock_values = False
     self.acc_type = 0
+    self.steep_grade_hold_warning = False  # set by carcontroller when hold fails on steep grade
 
   def update_button_enable(self, buttonEvents: list[structs.CarState.ButtonEvent]):
     if not self.CP.pcmCruise:
@@ -135,6 +136,7 @@ class CarState(CarStateBase):
     ret.buttonEvents = self.create_button_events(pt_cp, self.CCP.BUTTONS)
 
     ret.lowSpeedAlert = self.update_low_speed_alert(ret.vEgo)
+    ret.steepGradeHoldWarning = self.steep_grade_hold_warning
 
     self.frame += 1
     return ret
