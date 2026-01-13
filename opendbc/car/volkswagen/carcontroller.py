@@ -41,7 +41,6 @@ class CarController(CarControllerBase):
     self.reset_sent_while_engaged = False  # did we send a reset signal while engaged?
     self.remained_engaged_during_release = False  # did we stay engaged during hold release?
     self.steep_grade_hold_warning = False
-    self.long_active_prev = False  # track previous long_active for state transition
 
   def update(self, CC, CS, now_nanos):
     actuators = CC.actuators
@@ -166,14 +165,6 @@ class CarController(CarControllerBase):
 
         stopping = actuators.longControlState == LongCtrlState.stopping
         starting = actuators.longControlState == LongCtrlState.pid and (CS.esp_hold_confirmation or CS.out.vEgo < self.CP.vEgoStopping)
-
-        # prevent invalid state transition: (enabled=False, starting=False) -> (enabled=True, starting=True)
-        # ESP requires we first enable without starting, then start on subsequent frame
-        just_enabled = long_active and not self.long_active_prev
-        if just_enabled and starting:
-          starting = False
-        self.long_active_prev = long_active
-
         can_sends.extend(self.CCS.create_acc_accel_control(self.packer_pt, self.CAN.pt, CS.acc_type, long_active, accel,
                                                            acc_control, stopping, starting, CS.esp_hold_confirmation, reset_signal))
 
