@@ -99,7 +99,7 @@ class CarController(CarControllerBase):
         force_disable = needs_cycle and CS.out.brakePressed
         long_active = False if force_disable else CC.longActive
 
-        if (CS.out.standstill or CS.esp_hold_confirmation):
+        if (CS.esp_standstill_confirmation or CS.esp_hold_confirmation):
           self.frames_at_standstill += 1
         else:
           self.frames_at_standstill = 0
@@ -122,7 +122,7 @@ class CarController(CarControllerBase):
           self.esp_hold_frames += 1
         else:
           # hold is released
-          if not CS.out.standstill:
+          if not CS.esp_standstill_confirmation:
             # car is moving while hold is released - this resets the ESP's internal timer
             self.esp_hold_frames = 0
           # track if we remain engaged during the release period
