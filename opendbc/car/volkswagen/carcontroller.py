@@ -95,6 +95,10 @@ class CarController(CarControllerBase):
 
     if self.CP.openpilotLongitudinalControl:
       if self.frame % self.CCP.ACC_CONTROL_STEP == 0:
+        # Temporary test for VW MQB: trigger "too steep" alert on distance button press
+        if self.CCS == mqbcan and CS.gra_stock_values.get("GRA_Verstellung_Zeitluecke", 0) > 0:
+          self.steep_grade_hold_warning = True
+
         needs_cycle = self.CCS == mqbcan and CS.acc_type == 1
         force_disable = needs_cycle and CS.out.brakePressed
         long_active = False if force_disable else CC.longActive
