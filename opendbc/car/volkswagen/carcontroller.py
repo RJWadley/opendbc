@@ -195,7 +195,7 @@ class CarController(CarControllerBase):
       # FIXME: PQ may need to use the on-the-wire mph/kmh toggle to fix rounding errors
       # FIXME: Detect clusters with vEgoCluster offsets and apply an identical vCruiseCluster offset
       set_speed = hud_control.setSpeed * CV.MS_TO_KPH
-      can_sends.append(self.CCS.create_acc_hud_control(self.packer_pt, self.CAN.pt, acc_hud_status, set_speed,
+      can_sends.extend(self.CCS.create_acc_hud_control(self.packer_pt, self.CAN.pt, acc_hud_status, set_speed,
                                                        lead_distance, hud_control.leadDistanceBars, self.steep_grade_hold_warning))
 
     # **** Stock ACC Button Controls **************************************** #

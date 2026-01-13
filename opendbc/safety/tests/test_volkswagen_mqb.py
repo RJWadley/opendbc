@@ -20,6 +20,7 @@ MSG_HCA_01 = 0x126      # TX by OP, Heading Control Assist steering torque
 MSG_GRA_ACC_01 = 0x12B  # TX by OP, ACC control buttons for cancel/resume
 MSG_ACC_07 = 0x12E      # TX by OP, ACC control instructions to the drivetrain coordinator
 MSG_ACC_02 = 0x30C      # TX by OP, ACC HUD data to the instrument cluster
+MSG_ACC_04 = 0x324      # TX by OP, ACC HUD secondary/warning data to the instrument cluster
 MSG_LDW_02 = 0x397      # TX by OP, Lane line recognition and text alerts
 
 
@@ -148,9 +149,9 @@ class TestVolkswagenMqbStockSafety(TestVolkswagenMqbSafetyBase):
 
 
 class TestVolkswagenMqbLongSafety(TestVolkswagenMqbSafetyBase):
-  TX_MSGS = [[MSG_HCA_01, 0], [MSG_LDW_02, 0], [MSG_LH_EPS_03, 2], [MSG_ACC_02, 0], [MSG_ACC_06, 0], [MSG_ACC_07, 0]]
-  FWD_BLACKLISTED_ADDRS = {0: [MSG_LH_EPS_03], 2: [MSG_HCA_01, MSG_LDW_02, MSG_ACC_02, MSG_ACC_06, MSG_ACC_07]}
-  RELAY_MALFUNCTION_ADDRS = {0: (MSG_HCA_01, MSG_LDW_02, MSG_ACC_02, MSG_ACC_06, MSG_ACC_07), 2: (MSG_LH_EPS_03,)}
+  TX_MSGS = [[MSG_HCA_01, 0], [MSG_LDW_02, 0], [MSG_LH_EPS_03, 2], [MSG_ACC_02, 0], [MSG_ACC_04, 0], [MSG_ACC_06, 0], [MSG_ACC_07, 0]]
+  FWD_BLACKLISTED_ADDRS = {0: [MSG_LH_EPS_03], 2: [MSG_HCA_01, MSG_LDW_02, MSG_ACC_02, MSG_ACC_04, MSG_ACC_06, MSG_ACC_07]}
+  RELAY_MALFUNCTION_ADDRS = {0: (MSG_HCA_01, MSG_LDW_02, MSG_ACC_02, MSG_ACC_04, MSG_ACC_06, MSG_ACC_07), 2: (MSG_LH_EPS_03,)}
   INACTIVE_ACCEL = 3.01
 
   def setUp(self):
