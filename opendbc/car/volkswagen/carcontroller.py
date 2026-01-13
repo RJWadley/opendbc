@@ -36,8 +36,10 @@ class CarController(CarControllerBase):
     self.hca_frame_timer_running = 0
     self.hca_frame_same_torque = 0
     self.frames_at_standstill = 0
-    self.esp_hold_frames = 0  # consecutive frames of esp_hold_confirmation
+    self.esp_hold_frames = 0  # tracks ESP's internal hold timer
     self.esp_hold_prev = False
+    self.reset_sent_while_engaged = False  # did we send a reset signal while engaged?
+    self.remained_engaged_during_release = False  # did we stay engaged during hold release?
     self.steep_grade_hold_warning = False
 
   def update(self, CC, CS, now_nanos):
@@ -102,26 +104,47 @@ class CarController(CarControllerBase):
         else:
           self.frames_at_standstill = 0
 
-        # track consecutive frames of esp hold confirmation
-        # a successful reset cycle causes esp_hold_confirmation to drop for 1-2 frames
+        # track ESP's internal hold timer. this timer:
+        # - increments while esp_hold_confirmation is True
+        # - pauses (holds value) while esp_hold_confirmation is False but car is stationary
+        # - resets to 0 when:
+        #   a) car actually moves while esp_hold_confirmation is False, OR
+        #   b) a successful reset cycle: we sent reset while engaged, hold dropped, we remained engaged, hold reacquired
+        # note: disengagements during hold release just pause the timer, they don't reset it.
         if CS.esp_hold_confirmation:
-          # check if we just got hold confirmation back after a drop (successful reset)
+          # check if hold just reacquired after a valid reset cycle
           if not self.esp_hold_prev:
-            self.esp_hold_frames = 0
+            if self.reset_sent_while_engaged and self.remained_engaged_during_release and long_active:
+              # successful reset: we stayed engaged throughout the reset cycle
+              self.esp_hold_frames = 0
+            # clear reset tracking state
+            self.reset_sent_while_engaged = False
           self.esp_hold_frames += 1
         else:
-          self.esp_hold_frames = 0
+          # hold is released
+          if not CS.out.standstill:
+            # car is moving while hold is released - this resets the ESP's internal timer
+            self.esp_hold_frames = 0
+          # track if we remain engaged during the release period
+          if not long_active:
+            self.remained_engaged_during_release = False
         self.esp_hold_prev = CS.esp_hold_confirmation
 
         # if we're approaching the fault threshold without a successful reset, soft-disable
-        # the car will start rolling, which resets our standstill counter and allows re-braking
+        # the car will start rolling, which resets our timer and allows re-braking
         steep_grade_soft_disable = needs_cycle and self.esp_hold_frames >= ESP_HOLD_FAULT_THRESHOLD
         if steep_grade_soft_disable:
           long_active = False
           self.steep_grade_hold_warning = True
-        elif not CS.esp_hold_confirmation:
-          # clear warning when hold is released (car started moving)
-          self.steep_grade_hold_warning = False
+
+        # clear warning when:
+        # - user presses brake (taking over manually)
+        # - openpilot wants to drive away (positive accel while engaged)
+        if self.steep_grade_hold_warning and not steep_grade_soft_disable:
+          if CS.out.brakePressed:
+            self.steep_grade_hold_warning = False
+          elif CC.longActive and actuators.accel > 0:
+            self.steep_grade_hold_warning = False
 
         # expose warning state to carstate for event generation
         CS.steep_grade_hold_warning = self.steep_grade_hold_warning
@@ -130,6 +153,10 @@ class CarController(CarControllerBase):
         if (self.frames_at_standstill > 0 and needs_cycle and not steep_grade_soft_disable):
           if (self.frames_at_standstill > 10 and self.frames_at_standstill % 10 == 0):
             reset_signal = mqbcan.ResetSignal.CYCLE_AND_TORQUE
+            # track that we sent a reset while engaged for valid reset detection
+            if long_active:
+              self.reset_sent_while_engaged = True
+              self.remained_engaged_during_release = True
           else:
             reset_signal = mqbcan.ResetSignal.MAKE_OR_RELEASE_TORQUE
 
