@@ -168,6 +168,7 @@ def create_acc_hud_control(packer, bus, acc_hud_status, set_speed, lead_distance
   if steep_grade_warning:
     values["ACC_Texte_Primaeranz"] = 49  # "Steigung zu gross" (grade too steep)
     values["ACC_Akustik_02"] = 1  # hochpriore_Akustik (high priority acoustic)
+    values["ACC_Optischer_Fahrerhinweis"] = 1  # driver alert on
 
   return packer.make_can_msg("ACC_02", bus, values)
 
