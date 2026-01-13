@@ -155,7 +155,7 @@ def create_acc_accel_control(packer, bus, acc_type, acc_enabled, accel, acc_cont
   return commands
 
 
-def create_acc_hud_control(packer, bus, acc_hud_status, set_speed, lead_distance, distance):
+def create_acc_hud_control(packer, bus, acc_hud_status, set_speed, lead_distance, distance, steep_grade_warning=False):
   values = {
     "ACC_Status_Anzeige": acc_hud_status,
     "ACC_Wunschgeschw_02": set_speed if set_speed < 250 else 327.36,
@@ -163,6 +163,11 @@ def create_acc_hud_control(packer, bus, acc_hud_status, set_speed, lead_distance
     "ACC_Display_Prio": 3,
     "ACC_Abstandsindex": lead_distance,
   }
+
+  # when car cannot maintain hold on a steep grade, show "Steigung zu gross" warning with chime
+  if steep_grade_warning:
+    values["ACC_Texte_Primaeranz"] = 49  # "Steigung zu gross" (grade too steep)
+    values["ACC_Akustik_02"] = 1  # hochpriore_Akustik (high priority acoustic)
 
   return packer.make_can_msg("ACC_02", bus, values)
 
