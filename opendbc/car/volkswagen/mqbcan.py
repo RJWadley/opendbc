@@ -156,7 +156,9 @@ def create_acc_accel_control(packer, bus, acc_type, acc_enabled, accel, acc_cont
 
 
 def create_acc_hud_control(packer, bus, acc_hud_status, set_speed, lead_distance, distance, steep_grade_warning=False):
-  values = {
+  commands = []
+
+  acc_02_values = {
     "ACC_Status_Anzeige": acc_hud_status,
     "ACC_Wunschgeschw_02": set_speed if set_speed < 250 else 327.36,
     "ACC_Gesetzte_Zeitluecke": distance + 2,
@@ -164,13 +166,24 @@ def create_acc_hud_control(packer, bus, acc_hud_status, set_speed, lead_distance
     "ACC_Abstandsindex": lead_distance,
   }
 
-  # when car cannot maintain hold on a steep grade, show "Steigung zu gross" warning with chime
   if steep_grade_warning:
-    values["ACC_Texte_Primaeranz"] = 49  # "Steigung zu gross" (grade too steep)
-    values["ACC_Akustik_02"] = 1  # hochpriore_Akustik (high priority acoustic)
-    values["ACC_Optischer_Fahrerhinweis"] = 1  # driver alert on
+    acc_02_values["ACC_Texte_Primaeranz"] = 49  # "Steigung zu gross" (grade too steep)
+    acc_02_values["ACC_Akustik_02"] = 1  # hochpriore_Akustik (high priority acoustic)
+    acc_02_values["ACC_Optischer_Fahrerhinweis"] = 1  # driver alert on
 
-  return packer.make_can_msg("ACC_02", bus, values)
+  commands.append(packer.make_can_msg("ACC_02", bus, acc_02_values))
+
+  acc_04_values = {
+    "ACC_Abstand_Abstandswarner": 511,  # keine_Anzeige
+    "ACC_Zeitluecke_Abstandswarner": 63,  # keine_Anzeige
+  }
+
+  if steep_grade_warning:
+    acc_04_values["ACC_Texte"] = 5  # "ACC_Steigung_zu_gross" (Incline too steep)
+
+  commands.append(packer.make_can_msg("ACC_04", bus, acc_04_values))
+
+  return commands
 
 
 # AWV = Stopping Distance Reduction
