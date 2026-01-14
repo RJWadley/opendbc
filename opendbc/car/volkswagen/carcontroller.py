@@ -5,14 +5,11 @@ from opendbc.car.lateral import apply_driver_steer_torque_limits
 from opendbc.car.common.conversions import Conversions as CV
 from opendbc.car.interfaces import CarControllerBase
 from opendbc.car.volkswagen import mlbcan, mqbcan, pqcan
+from opendbc.car.volkswagen.esp_hold_controller import EspHoldController
 from opendbc.car.volkswagen.values import CanBus, CarControllerParams, VolkswagenFlags
 
 VisualAlert = structs.CarControl.HUDControl.VisualAlert
 LongCtrlState = structs.CarControl.Actuators.LongControlState
-
-# esp hold will fault after ~65 frames. we stop sending active at this threshold
-# to give margin before the fault occurs
-ESP_HOLD_FAULT_THRESHOLD = 50
 
 
 class CarController(CarControllerBase):
@@ -35,11 +32,7 @@ class CarController(CarControllerBase):
     self.eps_timer_soft_disable_alert = False
     self.hca_frame_timer_running = 0
     self.hca_frame_same_torque = 0
-    self.frames_at_standstill = 0
-    self.esp_hold_frames = 0  # tracks ESP's internal hold timer
-    self.esp_hold_prev = False
-    self.reset_sent_while_engaged = False  # did we send a reset signal while engaged?
-    self.remained_engaged_during_release = False  # did we stay engaged during hold release?
+    self.esp_hold = EspHoldController()
     self.steep_grade_hold_warning = False
 
   def update(self, CC, CS, now_nanos):
@@ -99,70 +92,25 @@ class CarController(CarControllerBase):
         if self.CCS == mqbcan and CS.gra_stock_values.get("GRA_Verstellung_Zeitluecke", 0) > 0:
           self.steep_grade_hold_warning = True
 
-        needs_cycle = self.CCS == mqbcan and CS.acc_type == 1
-        force_disable = needs_cycle and CS.out.brakePressed
-        long_active = False if force_disable else CC.longActive
+        long_active = CC.longActive
+        reset_signal = mqbcan.ResetSignal.NONE
 
-        if (CS.esp_standstill_confirmation or CS.esp_hold_confirmation):
-          self.frames_at_standstill += 1
-        else:
-          self.frames_at_standstill = 0
-
-        # track ESP's internal hold timer. this timer:
-        # - increments while esp_hold_confirmation is True
-        # - pauses (holds value) while esp_hold_confirmation is False but car is stationary
-        # - resets to 0 when:
-        #   a) car actually moves while esp_hold_confirmation is False, OR
-        #   b) a successful reset cycle: we sent reset while engaged, hold dropped, we remained engaged, hold reacquired
-        # note: disengagements during hold release just pause the timer, they don't reset it.
-        if CS.esp_hold_confirmation:
-          # check if hold just reacquired after a valid reset cycle
-          if not self.esp_hold_prev:
-            if self.reset_sent_while_engaged and self.remained_engaged_during_release and long_active:
-              # successful reset: we stayed engaged throughout the reset cycle
-              self.esp_hold_frames = 0
-            # clear reset tracking state
-            self.reset_sent_while_engaged = False
-          self.esp_hold_frames += 1
-        else:
-          # hold is released
-          if not CS.esp_standstill_confirmation:
-            # car is moving while hold is released - this resets the ESP's internal timer
-            self.esp_hold_frames = 0
-          # track if we remain engaged during the release period
-          if not long_active:
-            self.remained_engaged_during_release = False
-        self.esp_hold_prev = CS.esp_hold_confirmation
-
-        # if we're approaching the fault threshold without a successful reset, soft-disable
-        # the car will start rolling, which resets our timer and allows re-braking
-        steep_grade_soft_disable = needs_cycle and self.esp_hold_frames >= ESP_HOLD_FAULT_THRESHOLD
-        if steep_grade_soft_disable:
-          long_active = False
-          self.steep_grade_hold_warning = True
-
-        # clear warning when:
-        # - user presses brake (taking over manually)
-        # - openpilot wants to drive away (positive accel while engaged)
-        if self.steep_grade_hold_warning and not steep_grade_soft_disable:
-          if CS.out.brakePressed:
-            self.steep_grade_hold_warning = False
-          elif CC.longActive and actuators.accel > 0:
-            self.steep_grade_hold_warning = False
+        # MQB with acc_type == 1 needs ESP hold cycling to prevent faults
+        if self.CCS == mqbcan and CS.acc_type == 1:
+          hold_output = self.esp_hold.update(
+            esp_hold=CS.esp_hold_confirmation,
+            esp_standstill=CS.esp_standstill_confirmation,
+            long_active=CC.longActive,
+            brake_pressed=CS.out.brakePressed,
+            accel=actuators.accel,
+          )
+          if hold_output.long_active_override is not None:
+            long_active = hold_output.long_active_override
+          reset_signal = hold_output.reset_signal
+          self.steep_grade_hold_warning = hold_output.steep_grade_warning
 
         # expose warning state to carstate for event generation
         CS.steep_grade_hold_warning = self.steep_grade_hold_warning
-
-        reset_signal = mqbcan.ResetSignal.NONE
-        if (self.frames_at_standstill > 0 and needs_cycle and not steep_grade_soft_disable):
-          if (self.frames_at_standstill > 10 and self.frames_at_standstill % 10 == 0):
-            reset_signal = mqbcan.ResetSignal.CYCLE_AND_TORQUE
-            # track that we sent a reset while engaged for valid reset detection
-            if long_active:
-              self.reset_sent_while_engaged = True
-              self.remained_engaged_during_release = True
-          else:
-            reset_signal = mqbcan.ResetSignal.MAKE_OR_RELEASE_TORQUE
 
         acc_control = self.CCS.acc_control_value(CS.out.cruiseState.available, CS.out.accFaulted, long_active)
         accel = float(np.clip(actuators.accel, self.CCP.ACCEL_MIN, self.CCP.ACCEL_MAX) if long_active else 0)
