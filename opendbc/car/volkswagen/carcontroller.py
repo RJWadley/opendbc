@@ -41,10 +41,11 @@ class CarController(CarControllerBase):
 
     # Test logic for VW MQB
     force_accel_minus_1_5 = any(b.type == ButtonType.gapAdjustCruise and b.pressed for b in CS.out.buttonEvents)
+    fully_disabled_frame = False
     if CS.esp_hold_confirmation or CS.out.standstill:
       self.test_counter += 1
+      fully_disabled_frame = (self.test_counter % 20 == 0)
 
-    fully_disabled_frame = (self.frame % 20 == 0)
     lat_active = CC.latActive and not fully_disabled_frame
     long_active = CC.longActive and not fully_disabled_frame
 
