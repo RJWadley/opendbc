@@ -1,4 +1,5 @@
 import numpy as np
+from enum import IntEnum
 from opendbc.can import CANPacker
 from opendbc.car import Bus, DT_CTRL, structs
 from opendbc.car.lateral import apply_driver_steer_torque_limits
@@ -9,6 +10,13 @@ from opendbc.car.volkswagen.values import CanBus, CarControllerParams, Volkswage
 
 VisualAlert = structs.CarControl.HUDControl.VisualAlert
 LongCtrlState = structs.CarControl.Actuators.LongControlState
+
+
+class HoldState(IntEnum):
+  NORMAL = 0
+  DISABLED = 1
+  OVERRIDE_STARTING = 2
+  WAIT_FINAL_RELEASE = 3
 
 
 class CarController(CarControllerBase):
@@ -27,8 +35,8 @@ class CarController(CarControllerBase):
       self.CCS = mqbcan
 
     self.apply_torque_last = 0
-    self.accel_counter = 0
-    self.hold_state = 0  # 0=normal, 1=disabled, 2=override_starting, 3=wait_final_release
+    self.standstill_counter = 0
+    self.hold_state = HoldState.NORMAL
     self.gra_acc_counter_last = None
     self.eps_timer_soft_disable_alert = False
     self.hca_frame_timer_running = 0
@@ -87,46 +95,39 @@ class CarController(CarControllerBase):
 
     if self.CP.openpilotLongitudinalControl:
       if self.frame % self.CCP.ACC_CONTROL_STEP == 0:
-        # hold state machine for cycling esp timer
-        # state 0 (normal): count while in hold/standstill, transition to 1 when counter >= 10
-        # state 1 (disabled): send disabled, wait for esp_hold to release, then go to state 2
-        # state 2 (override): force acc07 starting=True stopping=False, wait for esp_hold reconfirm, then go to state 3
-        # state 3 (wait release): continue override, wait for esp_hold to release again, then reset counter and go to state 0
-
         acc07_stopping_override = None
         acc07_starting_override = None
 
-        if self.hold_state == 0:
-          if CS.esp_hold_confirmation or CS.out.standstill:
-            self.accel_counter += 1
-            if self.accel_counter >= 10:
-              self.hold_state = 1
-          else:
-            self.accel_counter = 0
+        if CS.esp_hold_confirmation or CS.out.standstill:
+          self.standstill_counter += 1
+          if self.standstill_counter >= 10:
+            self.hold_state = HoldState.DISABLED
+        else:
+          self.standstill_counter = 0
 
-        elif self.hold_state == 1:
+        if self.hold_state == HoldState.DISABLED:
           # wait for hold to release
           if not CS.esp_hold_confirmation:
-            self.hold_state = 2
+            self.hold_state = HoldState.OVERRIDE_STARTING
 
-        elif self.hold_state == 2:
+        elif self.hold_state == HoldState.OVERRIDE_STARTING:
           # override acc07 with starting=True, stopping=False
           # wait for hold to be reconfirmed
           acc07_stopping_override = False
           acc07_starting_override = True
           if CS.esp_hold_confirmation:
-            self.hold_state = 3
+            self.hold_state = HoldState.WAIT_FINAL_RELEASE
 
-        elif self.hold_state == 3:
+        elif self.hold_state == HoldState.WAIT_FINAL_RELEASE:
           # continue override, wait for hold to release again
           acc07_stopping_override = False
           acc07_starting_override = True
           if not CS.esp_hold_confirmation:
             # cycle complete, reset
-            self.accel_counter = 0
-            self.hold_state = 0
+            self.standstill_counter = 0
+            self.hold_state = HoldState.NORMAL
 
-        long_active = CC.longActive if self.hold_state == 0 else False
+        long_active = CC.longActive if self.hold_state != HoldState.DISABLED else False
 
         acc_control = self.CCS.acc_control_value(CS.out.cruiseState.available, CS.out.accFaulted, long_active)
         accel = float(np.clip(actuators.accel, self.CCP.ACCEL_MIN, self.CCP.ACCEL_MAX) if long_active else 0)
