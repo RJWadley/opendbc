@@ -100,6 +100,8 @@ class CarController(CarControllerBase):
 
         if CS.distance_button_pressed:
           accel = -1.5
+          stopping = CS.out.vEgo < self.CP.vEgoStopping if long_active else False
+          starting = False
 
         can_sends.extend(self.CCS.create_acc_accel_control(self.packer_pt, self.CAN.pt, CS.acc_type, long_active, accel,
                                                             acc_control, stopping, starting, CS.esp_hold_confirmation))
