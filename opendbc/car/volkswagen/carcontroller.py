@@ -108,6 +108,8 @@ class CarController(CarControllerBase):
 
         if self.hold_state == HoldState.DISABLED:
           # wait for hold to release
+          acc07_stopping_override = False
+          acc07_starting_override = False
           if not CS.esp_hold_confirmation:
             self.hold_state = HoldState.OVERRIDE_STARTING
 
@@ -128,7 +130,7 @@ class CarController(CarControllerBase):
             self.standstill_counter = 0
             self.hold_state = HoldState.NORMAL
 
-        long_active = CC.longActive if self.hold_state != HoldState.DISABLED else False
+        long_active = False if CS.out.brakePressed else CC.longActive
 
         acc_control = self.CCS.acc_control_value(CS.out.cruiseState.available, CS.out.accFaulted, long_active)
         accel = float(np.clip(actuators.accel, self.CCP.ACCEL_MIN, self.CCP.ACCEL_MAX) if long_active else 0)
