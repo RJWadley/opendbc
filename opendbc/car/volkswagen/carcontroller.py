@@ -100,10 +100,11 @@ class CarController(CarControllerBase):
 
         if CS.esp_hold_confirmation or CS.out.standstill:
           self.standstill_counter += 1
-          if self.standstill_counter >= 10:
+          if self.standstill_counter >= 30 and self.hold_state == HoldState.NORMAL:
             self.hold_state = HoldState.DISABLED
         else:
           self.standstill_counter = 0
+          self.hold_state = HoldState.NORMAL
 
         if self.hold_state == HoldState.DISABLED:
           # wait for hold to release
