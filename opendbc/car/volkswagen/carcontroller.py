@@ -99,19 +99,12 @@ class CarController(CarControllerBase):
         acc07_starting_override = None
 
         if (CC.longActive and self.CCS == mqbcan and CS.acc_type == 1):
-          if CS.esp_hold_confirmation or CS.out.standstill:
-            self.standstill_counter += 1
-          else:
-            self.standstill_counter = 0
-
-          if self.standstill_counter == 50:
+          if CS.esp_hold_confirmation:
             acc07_stopping_override = False
             acc07_starting_override = False
-          elif self.standstill_counter in (51, 52):
+          elif CS.out.standstill:
             acc07_stopping_override = False
             acc07_starting_override = True
-          elif self.standstill_counter > 52:
-            self.standstill_counter = 0
 
         long_active = False if CS.out.brakePressed else CC.longActive
 
