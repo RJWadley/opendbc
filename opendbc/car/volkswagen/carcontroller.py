@@ -97,8 +97,9 @@ class CarController(CarControllerBase):
       if self.frame % self.CCP.ACC_CONTROL_STEP == 0:
         acc07_stopping_override = None
         acc07_starting_override = None
+        long_active = False if CS.out.brakePressed else CC.longActive
 
-        if (CC.longActive and self.CCS == mqbcan and CS.acc_type == 1):
+        if (long_active and self.CCS == mqbcan and CS.acc_type == 1):
           if CS.esp_hold_confirmation or CS.out.standstill:
             self.standstill_counter += 1
           else:
@@ -109,13 +110,11 @@ class CarController(CarControllerBase):
             acc07_starting_override = False
           elif CS.out.standstill:
             if self.standstill_counter % 50 == 0:
-              acc07_stopping_override = False
+              acc07_stopping_override = True
               acc07_starting_override = False
             else:
               acc07_stopping_override = False
               acc07_starting_override = True
-
-        long_active = False if CS.out.brakePressed else CC.longActive
 
         acc_control = self.CCS.acc_control_value(CS.out.cruiseState.available, CS.out.accFaulted, long_active)
         accel = float(np.clip(actuators.accel, self.CCP.ACCEL_MIN, self.CCP.ACCEL_MAX) if long_active else 0)
