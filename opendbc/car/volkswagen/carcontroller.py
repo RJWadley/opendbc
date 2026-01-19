@@ -109,7 +109,7 @@ class CarController(CarControllerBase):
             acc07_stopping_override = False
             acc07_starting_override = False
           elif CS.out.standstill:
-            if self.standstill_counter % 50 == 0:
+            if self.standstill_counter % 100 == 0:
               acc07_stopping_override = True
               acc07_starting_override = False
             else:
