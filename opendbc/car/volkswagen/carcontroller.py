@@ -107,10 +107,10 @@ class CarController(CarControllerBase):
           if self.standstill_counter == 50:
             acc07_stopping_override = False
             acc07_starting_override = False
-          elif self.standstill_counter == 51:
+          elif self.standstill_counter in (51, 52):
             acc07_stopping_override = False
             acc07_starting_override = True
-          elif self.standstill_counter > 51:
+          elif self.standstill_counter > 52:
             self.standstill_counter = 0
 
         long_active = False if CS.out.brakePressed else CC.longActive
