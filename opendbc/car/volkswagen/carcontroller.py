@@ -100,35 +100,20 @@ class CarController(CarControllerBase):
 
         if CS.esp_hold_confirmation or CS.out.standstill:
           self.standstill_counter += 1
-          if self.standstill_counter >= 30 and self.hold_state == HoldState.NORMAL:
-            self.hold_state = HoldState.DISABLED
         else:
           self.standstill_counter = 0
-          self.hold_state = HoldState.NORMAL
 
-        if self.hold_state == HoldState.DISABLED:
-          # wait for hold to release
+        if self.standstill_counter == 10:
           acc07_stopping_override = False
           acc07_starting_override = False
-          if not CS.esp_hold_confirmation:
-            self.hold_state = HoldState.OVERRIDE_STARTING
-
-        elif self.hold_state == HoldState.OVERRIDE_STARTING:
-          # override acc07 with starting=True, stopping=False
-          # wait for hold to be reconfirmed
+        elif 10 < self.standstill_counter < 20:
           acc07_stopping_override = False
           acc07_starting_override = True
-          if CS.esp_hold_confirmation:
-            self.hold_state = HoldState.WAIT_FINAL_RELEASE
-
-        elif self.hold_state == HoldState.WAIT_FINAL_RELEASE:
-          # continue override, wait for hold to release again
+        elif self.standstill_counter == 20:
           acc07_stopping_override = False
-          acc07_starting_override = True
-          if not CS.esp_hold_confirmation:
-            # cycle complete, reset
-            self.standstill_counter = 0
-            self.hold_state = HoldState.NORMAL
+          acc07_starting_override = False
+        elif self.standstill_counter > 20:
+          self.standstill_counter = 0
 
         long_active = False if CS.out.brakePressed else CC.longActive
 
