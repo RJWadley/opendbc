@@ -121,13 +121,13 @@ class CarController(CarControllerBase):
           elif CS.out.standstill:
             acc07_stopping_override = False
             acc07_starting_override = True
-            # on hills, hold position; on flat ground, allow gentle negative accel
-            pitch = CC.orientationNED[1] if len(CC.orientationNED) >= 2 else 0
+            # uphill: hold position to prevent rollback; downhill/flat: gentle negative
+            pitch = CC.orientationNED[1] if len(CC.orientationNED) == 3 else 0
             if accel > 0:
               pass  # use requested accel
-            elif abs(pitch) > np.radians(1):
+            elif pitch > np.radians(1):  # uphill
               accel = 0
-            else:
+            else:  # downhill or flat
               accel = -1
 
         can_sends.extend(self.CCS.create_acc_accel_control(self.packer_pt, self.CAN.pt, CS.acc_type, long_active, accel,
