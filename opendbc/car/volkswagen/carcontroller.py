@@ -99,23 +99,6 @@ class CarController(CarControllerBase):
         acc07_starting_override = None
         long_active = False if CS.out.brakePressed else CC.longActive
 
-        if (long_active and self.CCS == mqbcan and CS.acc_type == 1):
-          if CS.esp_hold_confirmation or CS.out.standstill:
-            self.standstill_counter += 1
-          else:
-            self.standstill_counter = 0
-
-          if CS.esp_hold_confirmation and CS.out.standstill:
-            acc07_stopping_override = False
-            acc07_starting_override = False
-          elif CS.out.standstill:
-            if self.standstill_counter % 100 == 0:
-              acc07_stopping_override = True
-              acc07_starting_override = False
-            else:
-              acc07_stopping_override = False
-              acc07_starting_override = True
-
         acc_control = self.CCS.acc_control_value(CS.out.cruiseState.available, CS.out.accFaulted, long_active)
         accel = float(np.clip(actuators.accel, self.CCP.ACCEL_MIN, self.CCP.ACCEL_MAX) if long_active else 0)
         stopping = actuators.longControlState == LongCtrlState.stopping if long_active else False
@@ -125,6 +108,20 @@ class CarController(CarControllerBase):
           accel = -1.5
           stopping = CS.out.vEgo < self.CP.vEgoStopping if long_active else False
           starting = False
+
+        if (long_active and self.CCS == mqbcan and CS.acc_type == 1):
+          # if CS.esp_hold_confirmation or CS.out.standstill:
+          #   self.standstill_counter += 1
+          # else:
+          #   self.standstill_counter = 0
+
+          if CS.esp_hold_confirmation and CS.out.standstill:
+            acc07_stopping_override = False
+            acc07_starting_override = False
+          elif CS.out.standstill:
+            acc07_stopping_override = False
+            acc07_starting_override = True
+            accel = 0
 
         can_sends.extend(self.CCS.create_acc_accel_control(self.packer_pt, self.CAN.pt, CS.acc_type, long_active, accel,
                                                             acc_control, stopping, starting, CS.esp_hold_confirmation,
