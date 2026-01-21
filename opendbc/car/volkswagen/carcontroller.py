@@ -110,19 +110,28 @@ class CarController(CarControllerBase):
           starting = False
 
         if (long_active and self.CCS == mqbcan and CS.acc_type == 1):
-          # if CS.esp_hold_confirmation or CS.out.standstill:
-          #   self.standstill_counter += 1
-          # else:
-          #   self.standstill_counter = 0
+          # there are two timeouts we need to bypass.
+          # the first (hold confirmation timeout) is around 60-70 frames in
+          # the second (SRBM timeout) is around 130-150 frames in
+          if CS.esp_hold_confirmation or CS.out.standstill:
+            self.standstill_counter += 1
+          else:
+            self.standstill_counter = 0
 
-          if CS.esp_hold_confirmation and CS.out.standstill:
+          # bypass first timer by manually releasing confirmation
+          if self.standstill_counter == 1:
+            acc07_stopping_override = False
+            acc07_starting_override = False
+          elif self.standstill_counter >= 3:
             acc07_stopping_override = False
             acc07_starting_override = True
-            accel = self.CCP.ACCEL_MIN
-          # elif CS.out.standstill:
-          #   acc07_stopping_override = False
-          #   acc07_starting_override = False
-          #   if (accel < 0):
+
+          # bypass second timer by restarting SRBM when facing uphill
+          pitch = CC.orientationNED[1] if len(CC.orientationNED) == 3 else 0
+          if pitch > np.radians(1) and self.standstill_counter >= 100:
+            self.standstill_counter = 0
+            acc07_stopping_override = True
+            acc07_starting_override = False
 
         can_sends.extend(self.CCS.create_acc_accel_control(self.packer_pt, self.CAN.pt, CS.acc_type, long_active, accel,
                                                             acc_control, stopping, starting, CS.esp_hold_confirmation,
