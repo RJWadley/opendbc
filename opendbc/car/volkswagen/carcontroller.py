@@ -117,12 +117,12 @@ class CarController(CarControllerBase):
 
           if CS.esp_hold_confirmation and CS.out.standstill:
             acc07_stopping_override = False
-            acc07_starting_override = False
-          elif CS.out.standstill:
-            acc07_stopping_override = False
-            acc07_starting_override = False
-            if (accel < 0):
-              accel = self.CCP.ACCEL_MIN
+            acc07_starting_override = True
+            accel = self.CCP.ACCEL_MIN
+          # elif CS.out.standstill:
+          #   acc07_stopping_override = False
+          #   acc07_starting_override = False
+          #   if (accel < 0):
 
         can_sends.extend(self.CCS.create_acc_accel_control(self.packer_pt, self.CAN.pt, CS.acc_type, long_active, accel,
                                                             acc_control, stopping, starting, CS.esp_hold_confirmation,
