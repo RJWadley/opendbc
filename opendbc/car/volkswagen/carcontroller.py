@@ -119,16 +119,16 @@ class CarController(CarControllerBase):
             self.standstill_counter = 0
 
           # bypass first timer by manually releasing confirmation
-          if self.standstill_counter == 1:
+          if CS.esp_hold_confirmation and CS.out.standstill:
             acc07_stopping_override = False
             acc07_starting_override = False
-          elif self.standstill_counter >= 3:
+          elif CS.out.standstill:
             acc07_stopping_override = False
             acc07_starting_override = True
 
           # bypass second timer by restarting SRBM when facing uphill
           pitch = CC.orientationNED[1] if len(CC.orientationNED) == 3 else 0
-          if pitch > np.radians(1) and self.standstill_counter >= 100:
+          if pitch > np.radians(1) and self.standstill_counter % 100 == 0:
             self.standstill_counter = 0
             acc07_stopping_override = True
             acc07_starting_override = False
