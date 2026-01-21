@@ -89,7 +89,7 @@ def acc_hud_status_value(main_switch_on, acc_faulted, long_active):
 
 
 def create_acc_accel_control(packer, bus, acc_type, acc_enabled, accel, acc_control, stopping, starting, esp_hold,
-                             acc07_stopping_override=None, acc07_starting_override=None):
+                             esp_stopping_override=None, esp_starting_override=None):
   commands = []
 
   acc_06_values = {
@@ -107,8 +107,8 @@ def create_acc_accel_control(packer, bus, acc_type, acc_enabled, accel, acc_cont
   commands.append(packer.make_can_msg("ACC_06", bus, acc_06_values))
 
   # allow overriding ACC_07 starting/stopping independently
-  acc07_stopping = acc07_stopping_override if acc07_stopping_override is not None else stopping
-  acc07_starting = acc07_starting_override if acc07_starting_override is not None else starting
+  acc07_stopping = esp_stopping_override if esp_stopping_override is not None else stopping
+  acc07_starting = esp_starting_override if esp_starting_override is not None else starting
 
   if acc07_starting:
     acc_hold_type = 4  # hold release / startup

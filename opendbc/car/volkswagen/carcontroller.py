@@ -95,8 +95,8 @@ class CarController(CarControllerBase):
 
     if self.CP.openpilotLongitudinalControl:
       if self.frame % self.CCP.ACC_CONTROL_STEP == 0:
-        acc07_stopping_override = None
-        acc07_starting_override = None
+        esp_stopping_override = None
+        esp_starting_override = None
         long_active = False if CS.out.brakePressed else CC.longActive
 
         acc_control = self.CCS.acc_control_value(CS.out.cruiseState.available, CS.out.accFaulted, long_active)
@@ -120,22 +120,22 @@ class CarController(CarControllerBase):
 
           # bypass first timer by manually releasing confirmation
           if CS.esp_hold_confirmation and CS.out.standstill:
-            acc07_stopping_override = False
-            acc07_starting_override = False
+            esp_stopping_override = False
+            esp_starting_override = False
           elif CS.out.standstill:
-            acc07_stopping_override = False
-            acc07_starting_override = True
+            esp_stopping_override = False
+            esp_starting_override = True
 
           # bypass second timer by restarting SRBM when facing uphill
           pitch = CC.orientationNED[1] if len(CC.orientationNED) == 3 else 0
           if pitch > np.radians(1) and self.standstill_counter % 100 == 0:
             self.standstill_counter = 0
-            acc07_stopping_override = True
-            acc07_starting_override = False
+            esp_stopping_override = True
+            esp_starting_override = False
 
         can_sends.extend(self.CCS.create_acc_accel_control(self.packer_pt, self.CAN.pt, CS.acc_type, long_active, accel,
                                                             acc_control, stopping, starting, CS.esp_hold_confirmation,
-                                                            acc07_stopping_override, acc07_starting_override))
+                                                            esp_stopping_override, esp_starting_override))
 
       #if self.aeb_available:
       #  if self.frame % self.CCP.AEB_CONTROL_STEP == 0:
