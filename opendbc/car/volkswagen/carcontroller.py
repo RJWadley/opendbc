@@ -123,14 +123,14 @@ class CarController(CarControllerBase):
             esp_starting_override = True
 
           # bypass second timer by restarting SRBM when facing uphill
-          if CS.tsk_braking_request > 0:
-            self.braking_request_counter += 1
-          else:
-            self.braking_request_counter = 0
-          pitch = CC.orientationNED[1] if len(CC.orientationNED) == 3 else 0
-          if pitch > np.radians(1) and self.braking_request_counter >= 50:
-            esp_stopping_override = True
-            esp_starting_override = False
+          # if CS.tsk_braking_request > 0:
+          #   self.braking_request_counter += 1
+          # else:
+          #   self.braking_request_counter = 0
+          # pitch = CC.orientationNED[1] if len(CC.orientationNED) == 3 else 0
+          # if pitch > np.radians(1) and self.braking_request_counter >= 50:
+          #   esp_stopping_override = True
+          #   esp_starting_override = False
 
         can_sends.extend(self.CCS.create_acc_accel_control(self.packer_pt, self.CAN.pt, CS.acc_type, long_active, accel,
                                                             acc_control, stopping, starting, CS.esp_hold_confirmation,
