@@ -35,7 +35,7 @@ class CarController(CarControllerBase):
       self.CCS = mqbcan
 
     self.apply_torque_last = 0
-    self.standstill_counter = 0
+    self.braking_request_counter = 0
     self.hold_state = HoldState.NORMAL
     self.gra_acc_counter_last = None
     self.eps_timer_soft_disable_alert = False
@@ -109,27 +109,26 @@ class CarController(CarControllerBase):
           stopping = CS.out.vEgo < self.CP.vEgoStopping if long_active else False
           starting = False
 
+        # for MQB type 1 acc, there are two timeouts we need to bypass.
+        # the first (hold confirmation timeout) is around 60-70 frames in
+        # the second (SRBM timeout) is around 130-150 frames in
         if (long_active and self.CCS == mqbcan and CS.acc_type == 1):
-          # there are two timeouts we need to bypass.
-          # the first (hold confirmation timeout) is around 60-70 frames in
-          # the second (SRBM timeout) is around 130-150 frames in
-          if CS.esp_hold_confirmation or CS.out.standstill:
-            self.standstill_counter += 1
-          else:
-            self.standstill_counter = 0
 
           # bypass first timer by manually releasing confirmation
-          if CS.esp_hold_confirmation and CS.out.standstill:
+          if CS.esp_hold_confirmation and CS.esp_standstill_confirmation:
             esp_stopping_override = False
             esp_starting_override = False
-          elif CS.out.standstill:
+          elif CS.esp_standstill_confirmation:
             esp_stopping_override = False
             esp_starting_override = True
 
           # bypass second timer by restarting SRBM when facing uphill
+          if CS.tsk_braking_request > 0:
+            self.braking_request_counter += 1
+          else:
+            self.braking_request_counter = 0
           pitch = CC.orientationNED[1] if len(CC.orientationNED) == 3 else 0
-          if pitch > np.radians(1) and self.standstill_counter % 100 == 0:
-            self.standstill_counter = 0
+          if pitch > np.radians(1) and self.braking_request_counter >= 50:
             esp_stopping_override = True
             esp_starting_override = False
 
