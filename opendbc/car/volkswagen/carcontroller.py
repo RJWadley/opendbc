@@ -1,3 +1,5 @@
+import logging
+
 import numpy as np
 from opendbc.can import CANPacker
 from opendbc.car import Bus, DT_CTRL, structs
@@ -6,6 +8,9 @@ from opendbc.car.common.conversions import Conversions as CV
 from opendbc.car.interfaces import CarControllerBase
 from opendbc.car.volkswagen import mlbcan, mqbcan, pqcan
 from opendbc.car.volkswagen.values import CanBus, CarControllerParams, VolkswagenFlags
+
+CRUISE_FAULT_PROBE_WAIT_FRAMES = int(2.0 / DT_CTRL)
+CRUISE_FAULT_PROBE_INITIAL_N = 20
 
 VisualAlert = structs.CarControl.HUDControl.VisualAlert
 LongCtrlState = structs.CarControl.Actuators.LongControlState
@@ -31,6 +36,13 @@ class CarController(CarControllerBase):
     self.eps_timer_soft_disable_alert = False
     self.hca_frame_timer_running = 0
     self.hca_frame_same_torque = 0
+
+    self._cruise_fault_probe_phase = None
+    self._cruise_fault_probe_timer = 0
+    self._cruise_fault_probe_n = CRUISE_FAULT_PROBE_INITIAL_N
+    self._cruise_fault_probe_disengage_left = 0
+    self._cruise_fault_probe_last_disengage_n = None
+    self._cruise_fault_probe_done = False
 
   def update(self, CC, CS, now_nanos):
     actuators = CC.actuators
@@ -81,15 +93,55 @@ class CarController(CarControllerBase):
           ea_simulated_torque = CS.out.steeringTorque
         can_sends.append(self.CCS.create_eps_update(self.packer_pt, self.CAN.cam, CS.eps_stock_values, ea_simulated_torque))
 
+    # **** Cruise Fault Probe (alpha long) *********************************** #
+    # enable → wait 2s → disengage 20 frames → wait 2s → disengage 19 → … until car faults
+    probe_force_disengage = False
+    if not CC.enabled:
+      self._cruise_fault_probe_phase = None
+      self._cruise_fault_probe_done = False
+    elif self.CP.openpilotLongitudinalControl and not self._cruise_fault_probe_done:
+      if CS.out.accFaulted:
+        if self._cruise_fault_probe_last_disengage_n is not None:
+          logging.warning(f"cruise fault probe: faulted at disengage_n={self._cruise_fault_probe_last_disengage_n}")
+        self._cruise_fault_probe_done = True
+      else:
+        if self._cruise_fault_probe_phase is None:
+          self._cruise_fault_probe_phase = "wait_after_enable"
+          self._cruise_fault_probe_timer = CRUISE_FAULT_PROBE_WAIT_FRAMES
+          self._cruise_fault_probe_n = CRUISE_FAULT_PROBE_INITIAL_N
+        if self._cruise_fault_probe_phase == "wait_after_enable":
+          self._cruise_fault_probe_timer -= 1
+          if self._cruise_fault_probe_timer <= 0:
+            self._cruise_fault_probe_phase = "disengage"
+            self._cruise_fault_probe_disengage_left = self._cruise_fault_probe_n
+        elif self._cruise_fault_probe_phase == "disengage":
+          probe_force_disengage = True
+          self._cruise_fault_probe_disengage_left -= 1
+          if self._cruise_fault_probe_disengage_left <= 0:
+            self._cruise_fault_probe_last_disengage_n = self._cruise_fault_probe_n
+            self._cruise_fault_probe_n -= 1
+            if self._cruise_fault_probe_n < 1:
+              self._cruise_fault_probe_done = True
+            else:
+              self._cruise_fault_probe_phase = "wait_between_bouts"
+              self._cruise_fault_probe_timer = CRUISE_FAULT_PROBE_WAIT_FRAMES
+        elif self._cruise_fault_probe_phase == "wait_between_bouts":
+          self._cruise_fault_probe_timer -= 1
+          if self._cruise_fault_probe_timer <= 0:
+            self._cruise_fault_probe_phase = "disengage"
+            self._cruise_fault_probe_disengage_left = self._cruise_fault_probe_n
+
+    effective_long_active = CC.longActive and not probe_force_disengage
+
     # **** Acceleration Controls ******************************************** #
 
     if self.CP.openpilotLongitudinalControl:
       if self.frame % self.CCP.ACC_CONTROL_STEP == 0:
-        acc_control = self.CCS.acc_control_value(CS.out.cruiseState.available, CS.out.accFaulted, CC.longActive)
-        accel = float(np.clip(actuators.accel, self.CCP.ACCEL_MIN, self.CCP.ACCEL_MAX) if CC.longActive else 0)
+        acc_control = self.CCS.acc_control_value(CS.out.cruiseState.available, CS.out.accFaulted, effective_long_active)
+        accel = float(np.clip(actuators.accel, self.CCP.ACCEL_MIN, self.CCP.ACCEL_MAX) if effective_long_active else 0)
         stopping = actuators.longControlState == LongCtrlState.stopping
         starting = actuators.longControlState == LongCtrlState.pid and (CS.esp_hold_confirmation or CS.out.vEgo < self.CP.vEgoStopping)
-        can_sends.extend(self.CCS.create_acc_accel_control(self.packer_pt, self.CAN.pt, CS.acc_type, CC.longActive, accel,
+        can_sends.extend(self.CCS.create_acc_accel_control(self.packer_pt, self.CAN.pt, CS.acc_type, effective_long_active, accel,
                                                            acc_control, stopping, starting, CS.esp_hold_confirmation))
 
       #if self.aeb_available:
@@ -111,7 +163,7 @@ class CarController(CarControllerBase):
       lead_distance = 0
       if hud_control.leadVisible and self.frame * DT_CTRL > 1.0:  # Don't display lead until we know the scaling factor
         lead_distance = 512 if CS.upscale_lead_car_signal else 8
-      acc_hud_status = self.CCS.acc_hud_status_value(CS.out.cruiseState.available, CS.out.accFaulted, CC.longActive)
+      acc_hud_status = self.CCS.acc_hud_status_value(CS.out.cruiseState.available, CS.out.accFaulted, effective_long_active)
       # FIXME: PQ may need to use the on-the-wire mph/kmh toggle to fix rounding errors
       # FIXME: Detect clusters with vEgoCluster offsets and apply an identical vCruiseCluster offset
       set_speed = hud_control.setSpeed * CV.MS_TO_KPH
