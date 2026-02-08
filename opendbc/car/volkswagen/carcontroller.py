@@ -98,16 +98,7 @@ class CarController(CarControllerBase):
       if self.frame % self.CCP.ACC_CONTROL_STEP == 0:
         esp_stopping_override = None
         esp_starting_override = None
-        long_active = False if CS.out.brakePressed else CC.longActive # car is sensitive to signals when brake pressed (i.e. preEnabled)
-        pitch = CC.orientationNED[1] if len(CC.orientationNED) == 3 else 0
-        # the exact pitch at which uphill logic applies may need tweeaking
-        # if we choose a pitch too steep, we may fault. if we choose a pitch too shallow, the brake pump will run constantly
-        uphill = pitch > np.radians(1)
-
-        if CS.tsk_braking_request > 0:
-          self.braking_request_counter += 1
-        elif CS.esp_hold_confirmation:
-          self.braking_request_counter = 0
+        long_active = False if CS.out.brakePressed and CS.acc_type == 1 else CC.longActive # acc type 1 is sensitive to signals when brake pressed (i.e. preEnabled)
 
         acc_control = self.CCS.acc_control_value(CS.out.cruiseState.available, CS.out.accFaulted, long_active)
         accel = float(np.clip(actuators.accel, self.CCP.ACCEL_MIN, self.CCP.ACCEL_MAX) if long_active else 0)
@@ -129,6 +120,11 @@ class CarController(CarControllerBase):
         else:
           self.distance_button_was_stopped = None
 
+        if CS.tsk_braking_request > 0:
+          self.braking_request_counter += 1
+        elif CS.esp_hold_confirmation:
+          self.braking_request_counter = 0
+
         # for MQB type 1 acc, there are two timeouts we need to bypass.
         # the first (hold confirmation timeout) is around 60-70 frames of hold confirmation
         # the second (SRBM timeout) only applies on hills, and the timing varies between 1-3 seconds of SRBM active
@@ -143,15 +139,18 @@ class CarController(CarControllerBase):
             esp_starting_override = True
 
           # bypass second timer by restarting SRBM when facing uphill
-          if uphill and self.braking_request_counter >= 25 and not CS.esp_hold_confirmation:
-            esp_stopping_override = True
-            esp_starting_override = False
-            accel = -1 # must be lower than self.CCP.ACCEL_MIN
+          # the exact pitch at which uphill logic applies may need tweaking
+          # if we choose a pitch too steep, we may fault. if we choose a pitch too shallow, the brake pump will run constantly
+          pitch = CC.orientationNED[1] if len(CC.orientationNED) == 3 else 0
+          if pitch > np.radians(1):
+            if self.braking_request_counter >= 25 and not CS.esp_hold_confirmation:
+              esp_stopping_override = True
+              esp_starting_override = False
+              accel = -1 # must be lower than self.CCP.ACCEL_MIN
 
-          # when stopped on a hill (and not actively bypassing the second timer)
-          # a) prevent getting stuck during a takeoff attempt
-          # b) prevent accidental rollback during a hold
-          elif (uphill):
+            # when stopped on a hill (and not actively bypassing the second timer)
+            # a) prevent getting stuck during a takeoff attempt
+            # b) prevent accidental rollback during a hold
             if (accel < 0):
               accel = self.CCP.ACCEL_MIN
             else:
