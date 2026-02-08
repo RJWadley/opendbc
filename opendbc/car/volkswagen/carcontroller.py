@@ -105,8 +105,8 @@ class CarController(CarControllerBase):
         stopping = actuators.longControlState == LongCtrlState.stopping if long_active else False
         starting = actuators.longControlState == LongCtrlState.pid and (CS.esp_hold_confirmation or CS.out.vEgo < self.CP.vEgoStopping) if long_active else False
 
+        # distance button debug helper, force stop or start when distance button is pressed
         if CS.distance_button_pressed:
-          # latch whether we were stopped at the moment the button was first pressed
           if self.distance_button_was_stopped is None:
             self.distance_button_was_stopped = CS.esp_standstill_confirmation
           if self.distance_button_was_stopped:
@@ -146,12 +146,12 @@ class CarController(CarControllerBase):
             if self.braking_request_counter >= 25 and not CS.esp_hold_confirmation:
               esp_stopping_override = True
               esp_starting_override = False
-              accel = -1 # must be lower than self.CCP.ACCEL_MIN
+              accel = -1 # must be higher than self.CCP.ACCEL_MIN
 
             # when stopped on a hill (and not actively bypassing the second timer)
             # a) prevent getting stuck during a takeoff attempt
             # b) prevent accidental rollback during a hold
-            if (accel < 0):
+            elif (accel < 0):
               accel = self.CCP.ACCEL_MIN
             else:
               accel = max(accel, 1)
