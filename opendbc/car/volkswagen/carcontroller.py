@@ -113,26 +113,34 @@ class CarController(CarControllerBase):
         # the first (hold confirmation timeout) is around 60-70 frames in
         # the second (SRBM timeout) is around 130-150 frames in
         if (long_active and self.CCS == mqbcan and CS.acc_type == 1):
+          pitch = CC.orientationNED[1] if len(CC.orientationNED) == 3 else 0
+          uphill_standstill = pitch > np.radians(1) and CS.esp_standstill_confirmation
+          if CS.tsk_braking_request > 0:
+            self.braking_request_counter += 1
+          elif CS.esp_hold_confirmation:
+            self.braking_request_counter = 0
 
-          # bypass first timer by manually releasing confirmation
+          # bypass first timer by manually releasing the hold confirmation
           if CS.esp_hold_confirmation and CS.esp_standstill_confirmation:
             esp_stopping_override = False
             esp_starting_override = False
           elif CS.esp_standstill_confirmation:
             esp_stopping_override = False
             esp_starting_override = True
-            if (accel < -0.2):
-              accel = self.CCP.ACCEL_MIN
 
           # bypass second timer by restarting SRBM when facing uphill
-          if CS.tsk_braking_request > 0:
-            self.braking_request_counter += 1
-          elif CS.esp_standstill_confirmation:
-            self.braking_request_counter = 0
-          pitch = CC.orientationNED[1] if len(CC.orientationNED) == 3 else 0
-          if pitch > np.radians(1) and self.braking_request_counter >= 25:
+          if uphill_standstill and self.braking_request_counter >= 25:
             esp_stopping_override = True
             esp_starting_override = False
+
+          # when stopped on a hill
+          # a) prevent getting stuck during a takeoff attempt
+          # b) prevent accidental rollaway during a hold
+          if (uphill_standstill):
+            if (accel < 0):
+              accel = self.CCP.ACCEL_MIN
+            else:
+              accel = max(accel, 1)
 
         can_sends.extend(self.CCS.create_acc_accel_control(self.packer_pt, self.CAN.pt, CS.acc_type, long_active, accel,
                                                             acc_control, stopping, starting, CS.esp_hold_confirmation,
