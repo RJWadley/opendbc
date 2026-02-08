@@ -97,7 +97,14 @@ class CarController(CarControllerBase):
       if self.frame % self.CCP.ACC_CONTROL_STEP == 0:
         esp_stopping_override = None
         esp_starting_override = None
-        long_active = False if CS.out.brakePressed else CC.longActive
+        long_active = False if CS.out.brakePressed else CC.longActive # car is sensitive to signals when brake pressed (i.e. preEnabled)
+        pitch = CC.orientationNED[1] if len(CC.orientationNED) == 3 else 0
+        uphill_standstill = pitch > np.radians(1) and CS.esp_standstill_confirmation
+
+        if CS.tsk_braking_request > 0:
+          self.braking_request_counter += 1
+        elif CS.esp_hold_confirmation:
+          self.braking_request_counter = 0
 
         acc_control = self.CCS.acc_control_value(CS.out.cruiseState.available, CS.out.accFaulted, long_active)
         accel = float(np.clip(actuators.accel, self.CCP.ACCEL_MIN, self.CCP.ACCEL_MAX) if long_active else 0)
@@ -113,12 +120,6 @@ class CarController(CarControllerBase):
         # the first (hold confirmation timeout) is around 60-70 frames in
         # the second (SRBM timeout) is around 130-150 frames in
         if (long_active and self.CCS == mqbcan and CS.acc_type == 1):
-          pitch = CC.orientationNED[1] if len(CC.orientationNED) == 3 else 0
-          uphill_standstill = pitch > np.radians(1) and CS.esp_standstill_confirmation
-          if CS.tsk_braking_request > 0:
-            self.braking_request_counter += 1
-          elif CS.esp_hold_confirmation:
-            self.braking_request_counter = 0
 
           # bypass first timer by manually releasing the hold confirmation
           if CS.esp_hold_confirmation and CS.esp_standstill_confirmation:
@@ -135,7 +136,7 @@ class CarController(CarControllerBase):
 
           # when stopped on a hill
           # a) prevent getting stuck during a takeoff attempt
-          # b) prevent accidental rollaway during a hold
+          # b) prevent accidental rollback during a hold
           if (uphill_standstill):
             if (accel < 0):
               accel = self.CCP.ACCEL_MIN
