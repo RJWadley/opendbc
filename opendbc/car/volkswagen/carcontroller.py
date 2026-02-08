@@ -100,7 +100,9 @@ class CarController(CarControllerBase):
         esp_starting_override = None
         long_active = False if CS.out.brakePressed else CC.longActive # car is sensitive to signals when brake pressed (i.e. preEnabled)
         pitch = CC.orientationNED[1] if len(CC.orientationNED) == 3 else 0
-        uphill_standstill = pitch > np.radians(1) and CS.esp_standstill_confirmation
+        # the exact pitch at which uphill logic applies may need tweeaking
+        # if we choose a pitch too steep, we may fault. if we choose a pitch too shallow, the brake pump will run constantly
+        uphill = pitch > np.radians(1)
 
         if CS.tsk_braking_request > 0:
           self.braking_request_counter += 1
@@ -115,11 +117,11 @@ class CarController(CarControllerBase):
         if CS.distance_button_pressed:
           # latch whether we were stopped at the moment the button was first pressed
           if self.distance_button_was_stopped is None:
-            self.distance_button_was_stopped = CS.out.vEgo < self.CP.vEgoStopping
+            self.distance_button_was_stopped = CS.esp_standstill_confirmation
           if self.distance_button_was_stopped:
-            accel = 0.1
+            accel = 1
             stopping = False
-            starting = True
+            starting = CS.out.vEgo < self.CP.vEgoStopping if long_active else False
           else:
             accel = -1.5
             stopping = CS.out.vEgo < self.CP.vEgoStopping if long_active else False
@@ -128,27 +130,28 @@ class CarController(CarControllerBase):
           self.distance_button_was_stopped = None
 
         # for MQB type 1 acc, there are two timeouts we need to bypass.
-        # the first (hold confirmation timeout) is around 60-70 frames in
-        # the second (SRBM timeout) is around 130-150 frames in
-        if (long_active and self.CCS == mqbcan and CS.acc_type == 1):
+        # the first (hold confirmation timeout) is around 60-70 frames of hold confirmation
+        # the second (SRBM timeout) only applies on hills, and the timing varies between 1-3 seconds of SRBM active
+        if (long_active and self.CCS == mqbcan and CS.acc_type == 1 and CS.esp_standstill_confirmation):
 
           # bypass first timer by manually releasing the hold confirmation
-          if CS.esp_hold_confirmation and CS.esp_standstill_confirmation:
+          if CS.esp_hold_confirmation:
             esp_stopping_override = False
             esp_starting_override = False
-          elif CS.esp_standstill_confirmation:
+          else:
             esp_stopping_override = False
             esp_starting_override = True
 
           # bypass second timer by restarting SRBM when facing uphill
-          if uphill_standstill and self.braking_request_counter >= 25:
+          if uphill and self.braking_request_counter >= 25 and not CS.esp_hold_confirmation:
             esp_stopping_override = True
             esp_starting_override = False
+            accel = -1 # must be lower than self.CCP.ACCEL_MIN
 
-          # when stopped on a hill
+          # when stopped on a hill (and not actively bypassing the second timer)
           # a) prevent getting stuck during a takeoff attempt
           # b) prevent accidental rollback during a hold
-          if (uphill_standstill):
+          elif (uphill):
             if (accel < 0):
               accel = self.CCP.ACCEL_MIN
             else:
