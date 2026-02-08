@@ -39,6 +39,7 @@ class CarController(CarControllerBase):
     self.hold_state = HoldState.NORMAL
     self.gra_acc_counter_last = None
     self.eps_timer_soft_disable_alert = False
+    self.distance_button_was_stopped = None
     self.hca_frame_timer_running = 0
     self.hca_frame_same_torque = 0
 
@@ -112,9 +113,19 @@ class CarController(CarControllerBase):
         starting = actuators.longControlState == LongCtrlState.pid and (CS.esp_hold_confirmation or CS.out.vEgo < self.CP.vEgoStopping) if long_active else False
 
         if CS.distance_button_pressed:
-          accel = -1.5
-          stopping = CS.out.vEgo < self.CP.vEgoStopping if long_active else False
-          starting = False
+          # latch whether we were stopped at the moment the button was first pressed
+          if self.distance_button_was_stopped is None:
+            self.distance_button_was_stopped = CS.out.vEgo < self.CP.vEgoStopping
+          if self.distance_button_was_stopped:
+            accel = 0.1
+            stopping = False
+            starting = True
+          else:
+            accel = -1.5
+            stopping = CS.out.vEgo < self.CP.vEgoStopping if long_active else False
+            starting = False
+        else:
+          self.distance_button_was_stopped = None
 
         # for MQB type 1 acc, there are two timeouts we need to bypass.
         # the first (hold confirmation timeout) is around 60-70 frames in
