@@ -139,10 +139,9 @@ class CarController(CarControllerBase):
             esp_starting_override = True
 
           # when stopped on a hill bypass second timer by restarting SRBM
-          # the exact pitch at which uphill logic applies may need tweaking
-          # if we choose a pitch too steep, we may fault. if we choose a pitch too shallow, the brake pump will run constantly
-          pitch = CC.orientationNED[1] if len(CC.orientationNED) == 3 else 0
-          if pitch > np.radians(1):
+          # the exact grade at which uphill logic applies may need tweaking
+          # if we choose a grade too steep, we may fault. if we choose a grade too shallow, the brake pump will run constantly
+          if CS.tsk_grade > 1:
             if self.braking_request_counter >= 25:
               esp_stopping_override = True
               esp_starting_override = False

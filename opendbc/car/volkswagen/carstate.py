@@ -18,6 +18,7 @@ class CarState(CarStateBase):
     self.esp_hold_confirmation = False
     self.esp_standstill_confirmation = False
     self.tsk_braking_request = 0
+    self.tsk_grade = 0
     self.distance_button_pressed = False
     self.upscale_lead_car_signal = False
     self.eps_stock_values = False
@@ -106,6 +107,7 @@ class CarState(CarStateBase):
       self.esp_hold_confirmation = bool(pt_cp.vl["ESP_21"]["ESP_Haltebestaetigung"])
       self.esp_standstill_confirmation = pt_cp.vl["ESP_21"]["ESP_v_Signal"] == 0
       self.tsk_braking_request = pt_cp.vl["TSK_06"]["TSK_Radbremsmom"]
+      self.tsk_grade = pt_cp.vl["Motor_16"]["TSK_Steigung"]
       acc_limiter_mode = ext_cp.vl["ACC_02"]["ACC_Gesetzte_Zeitluecke"] == 0
       speed_limiter_mode = bool(pt_cp.vl["TSK_06"]["TSK_Limiter_ausgewaehlt"])
 
