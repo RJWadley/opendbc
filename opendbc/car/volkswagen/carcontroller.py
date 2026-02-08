@@ -138,21 +138,22 @@ class CarController(CarControllerBase):
             esp_stopping_override = False
             esp_starting_override = True
 
-          # bypass second timer by restarting SRBM when facing uphill
+          # when stopped on a hill bypass second timer by restarting SRBM
           # the exact pitch at which uphill logic applies may need tweaking
           # if we choose a pitch too steep, we may fault. if we choose a pitch too shallow, the brake pump will run constantly
           pitch = CC.orientationNED[1] if len(CC.orientationNED) == 3 else 0
           if pitch > np.radians(1):
-            if self.braking_request_counter >= 25 and not CS.esp_hold_confirmation:
+            if self.braking_request_counter >= 25:
               esp_stopping_override = True
               esp_starting_override = False
-              accel = -1 # must be higher than self.CCP.ACCEL_MIN
 
-            # when stopped on a hill (and not actively bypassing the second timer)
-            # a) prevent getting stuck during a takeoff attempt
+            # a) ensure SRBM always restarts when a hold is confirmed
+            if (CS.esp_hold_confirmation):
+              accel = -1
             # b) prevent accidental rollback during a hold
             elif (accel < 0):
               accel = self.CCP.ACCEL_MIN
+            # c) prevent getting stuck during a takeoff attempt
             else:
               accel = max(accel, 1)
 
