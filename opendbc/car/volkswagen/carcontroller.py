@@ -122,7 +122,7 @@ class CarController(CarControllerBase):
 
         if CS.tsk_braking_request > 0:
           self.braking_request_counter += 1
-        elif CS.esp_hold_confirmation:
+        else:
           self.braking_request_counter = 0
 
         # for MQB type 1 acc, there are two timeouts we need to bypass.
@@ -146,11 +146,11 @@ class CarController(CarControllerBase):
               esp_stopping_override = True
               esp_starting_override = False
 
-            # a) ensure SRBM always restarts when a hold is confirmed
-            if (CS.esp_hold_confirmation):
+            # a) ensure SRBM actually restarts by sending a smaller brake request during the reset
+            if accel < 0 and CS.tsk_braking_request == 0:
               accel = -1
             # b) prevent accidental rollback during a hold
-            elif (accel < 0):
+            elif accel < 0:
               accel = self.CCP.ACCEL_MIN
             # c) prevent getting stuck during a takeoff attempt
             else:
