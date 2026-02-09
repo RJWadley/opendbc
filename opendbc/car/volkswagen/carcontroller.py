@@ -35,7 +35,7 @@ class CarController(CarControllerBase):
       self.CCS = mqbcan
 
     self.apply_torque_last = 0
-    self.braking_request_counter = 0
+    self.braking_request_last = 0
     self.hold_state = HoldState.NORMAL
     self.gra_acc_counter_last = None
     self.eps_timer_soft_disable_alert = False
@@ -120,11 +120,6 @@ class CarController(CarControllerBase):
         else:
           self.distance_button_was_stopped = None
 
-        if CS.tsk_braking_request > 0:
-          self.braking_request_counter += 1
-        else:
-          self.braking_request_counter = 0
-
         # for MQB type 1 acc, there are two timeouts we need to bypass.
         # the first (hold confirmation timeout) is around 60-70 frames of hold confirmation
         # the second (SRBM timeout) only applies on hills, and the timing varies between 1-3 seconds of SRBM active
@@ -134,27 +129,25 @@ class CarController(CarControllerBase):
           if CS.esp_hold_confirmation or CS.esp_stopping_confirmation:
             esp_stopping_override = False
             esp_starting_override = False
+            accel = -1.5 # helps SRBM restart consistently
           else:
             esp_stopping_override = False
             esp_starting_override = True
 
-          # when stopped on a hill bypass second timer by restarting SRBM
-          # the exact grade at which uphill logic applies may need tweaking
-          # if we choose a grade too steep, we may fault. if we choose a grade too shallow, the brake pump will run constantly
-          if CS.tsk_grade > 1:
-            if self.braking_request_counter >= 25:
-              esp_stopping_override = True
-              esp_starting_override = False
+            # when stopped on a hill bypass second timer by restarting SRBM
+            # the exact grade at which uphill logic applies may need tweaking
+            if CS.tsk_grade > 2:
+              if self.braking_request_last == CS.tsk_braking_request and CS.tsk_braking_request > 0:
+                esp_stopping_override = True
+                esp_starting_override = False
+              self.braking_request_last = CS.tsk_braking_request
 
-            # a) ensure SRBM actually restarts by sending a smaller brake request during the reset
-            if accel < 0 and (CS.esp_hold_confirmation or CS.esp_stopping_confirmation):
-              accel = -1.5
-            # b) prevent accidental rollback during a hold
-            elif accel < 0:
-              accel = self.CCP.ACCEL_MIN
-            # c) prevent getting stuck during a takeoff attempt
-            else:
-              accel = max(accel, 1)
+              # on hill, prevent accidental rollback during a hold
+              if accel < 0:
+                accel = self.CCP.ACCEL_MIN
+              # on hill, prevent getting stuck during a takeoff attempt
+              else:
+                accel = max(accel, 1)
 
         can_sends.extend(self.CCS.create_acc_accel_control(self.packer_pt, self.CAN.pt, CS.acc_type, long_active, accel,
                                                             acc_control, stopping, starting, CS.esp_hold_confirmation,
