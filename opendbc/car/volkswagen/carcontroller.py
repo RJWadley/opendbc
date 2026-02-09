@@ -35,7 +35,7 @@ class CarController(CarControllerBase):
       self.CCS = mqbcan
 
     self.apply_torque_last = 0
-    self.braking_request_last = 0
+    self.braking_request_counter = 0
     self.hold_state = HoldState.NORMAL
     self.gra_acc_counter_last = None
     self.eps_timer_soft_disable_alert = False
@@ -120,6 +120,11 @@ class CarController(CarControllerBase):
         else:
           self.distance_button_was_stopped = None
 
+        if CS.tsk_braking_request > 0:
+          self.braking_request_counter += 1
+        else:
+          self.braking_request_counter = 0
+
         # for MQB type 1 acc, there are two timeouts we need to bypass.
         # the first (hold confirmation timeout) is around 60-70 frames of hold confirmation
         # the second (SRBM timeout) only applies on hills, and the timing varies between 1-3 seconds of SRBM active
@@ -137,10 +142,9 @@ class CarController(CarControllerBase):
             # when stopped on a hill bypass second timer by restarting SRBM
             # the exact grade at which uphill logic applies may need tweaking
             if CS.tsk_grade > 2:
-              if self.braking_request_last == CS.tsk_braking_request and CS.tsk_braking_request > 0:
+              if self.braking_request_counter >= 25:
                 esp_stopping_override = True
                 esp_starting_override = False
-              self.braking_request_last = CS.tsk_braking_request
 
               # on hill, prevent accidental rollback during a hold
               if accel < 0:
