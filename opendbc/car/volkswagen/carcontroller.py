@@ -130,7 +130,7 @@ class CarController(CarControllerBase):
 
           # when stopped on a hill bypass second timer by restarting SRBM
           # the exact grade at which uphill logic applies may need tweaking
-          if CS.tsk_grade > 2 and self.braking_request_counter == 25:
+          if CS.tsk_grade > 2 and self.braking_request_counter % 26 == 25:
             esp_stopping_override = True
             esp_starting_override = False
 
