@@ -114,7 +114,7 @@ class CarController(CarControllerBase):
             stopping = False
             starting = CS.out.vEgo < self.CP.vEgoStopping if long_active else False
           else:
-            accel = -1.5
+            accel = min(-1.5, accel)
             stopping = CS.out.vEgo < self.CP.vEgoStopping if long_active else False
             starting = False
         else:
@@ -131,7 +131,7 @@ class CarController(CarControllerBase):
         if (long_active and self.CCS == mqbcan and CS.acc_type == 1 and CS.esp_standstill_confirmation):
 
           # bypass first timer by manually releasing the hold confirmation
-          if CS.esp_hold_confirmation:
+          if CS.esp_hold_confirmation or CS.esp_stopping_confirmation:
             esp_stopping_override = False
             esp_starting_override = False
           else:
@@ -148,7 +148,7 @@ class CarController(CarControllerBase):
 
             # a) ensure SRBM actually restarts by sending a smaller brake request during the reset
             if accel < 0 and CS.tsk_braking_request == 0:
-              accel = -1
+              accel = -1.5
             # b) prevent accidental rollback during a hold
             elif accel < 0:
               accel = self.CCP.ACCEL_MIN

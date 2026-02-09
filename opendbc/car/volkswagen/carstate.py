@@ -105,6 +105,7 @@ class CarState(CarStateBase):
 
       self.acc_type = ext_cp.vl["ACC_06"]["ACC_Typ"]
       self.esp_hold_confirmation = bool(pt_cp.vl["ESP_21"]["ESP_Haltebestaetigung"])
+      self.esp_stopping_confirmation = bool(pt_cp.vl["ESP_21"]["ESP_Anhaltevorgang_ACC_aktiv"])
       self.esp_standstill_confirmation = pt_cp.vl["ESP_21"]["ESP_v_Signal"] == 0
       self.tsk_braking_request = pt_cp.vl["TSK_06"]["TSK_Radbremsmom"]
       self.tsk_grade = pt_cp.vl["Motor_16"]["TSK_Steigung"]
