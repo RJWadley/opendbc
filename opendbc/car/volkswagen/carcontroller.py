@@ -11,14 +11,6 @@ from opendbc.car.volkswagen.values import CanBus, CarControllerParams, Volkswage
 VisualAlert = structs.CarControl.HUDControl.VisualAlert
 LongCtrlState = structs.CarControl.Actuators.LongControlState
 
-
-class HoldState(IntEnum):
-  NORMAL = 0
-  DISABLED = 1
-  OVERRIDE_STARTING = 2
-  WAIT_FINAL_RELEASE = 3
-
-
 class CarController(CarControllerBase):
   def __init__(self, dbc_names, CP):
     super().__init__(dbc_names, CP)
@@ -36,7 +28,6 @@ class CarController(CarControllerBase):
 
     self.apply_torque_last = 0
     self.braking_request_counter = 0
-    self.hold_state = HoldState.NORMAL
     self.gra_acc_counter_last = None
     self.eps_timer_soft_disable_alert = False
     self.distance_button_was_stopped = None
@@ -130,28 +121,28 @@ class CarController(CarControllerBase):
         # the second (SRBM timeout) only applies on hills, and the timing varies between 1-3 seconds of SRBM active
         if (long_active and self.CCS == mqbcan and CS.acc_type == 1 and CS.esp_standstill_confirmation):
 
-          # bypass first timer by manually releasing the hold confirmation
-          if CS.esp_hold_confirmation or CS.esp_stopping_confirmation:
-            esp_stopping_override = False
+          # on hill, maximize braking to prevent accidental rollback during a hold
+          if CS.tsk_grade > 2 and accel < 0:
+            accel = self.CCP.ACCEL_MIN
+          # on hill, prevent getting stuck during a takeoff attempt
+          elif CS.tsk_grade > 2:
+            accel = max(accel, 1)
+
+          # when stopped on a hill bypass second timer by restarting SRBM
+          # the exact grade at which uphill logic applies may need tweaking
+          if CS.tsk_grade > 2 and self.braking_request_counter >= 25:
+            esp_stopping_override = True
             esp_starting_override = False
-            accel = -1.5 # helps SRBM restart consistently
+
+          # bypass first timer by manually releasing the hold confirmation
+          elif CS.esp_hold_confirmation or CS.esp_stopping_confirmation:
+            accel = -1.5 # helps to restart SRBM
+            if CS.tsk_braking_request == 0:
+              esp_stopping_override = False
+              esp_starting_override = False
           else:
             esp_stopping_override = False
             esp_starting_override = True
-
-            # when stopped on a hill bypass second timer by restarting SRBM
-            # the exact grade at which uphill logic applies may need tweaking
-            if CS.tsk_grade > 2:
-              if self.braking_request_counter >= 25:
-                esp_stopping_override = True
-                esp_starting_override = False
-
-              # on hill, prevent accidental rollback during a hold
-              if accel < 0:
-                accel = self.CCP.ACCEL_MIN
-              # on hill, prevent getting stuck during a takeoff attempt
-              else:
-                accel = max(accel, 1)
 
         can_sends.extend(self.CCS.create_acc_accel_control(self.packer_pt, self.CAN.pt, CS.acc_type, long_active, accel,
                                                             acc_control, stopping, starting, CS.esp_hold_confirmation,
