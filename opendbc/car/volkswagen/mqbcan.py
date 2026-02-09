@@ -89,7 +89,7 @@ def acc_hud_status_value(main_switch_on, acc_faulted, long_active):
 
 
 def create_acc_accel_control(packer, bus, acc_type, acc_enabled, accel, acc_control, stopping, starting, esp_hold,
-                             esp_stopping_override=None, esp_starting_override=None):
+                             esp_stopping_override=None, esp_starting_override=None, v_ego=0):
   commands = []
 
   acc_06_values = {
@@ -119,8 +119,15 @@ def create_acc_accel_control(packer, bus, acc_type, acc_enabled, accel, acc_cont
   else:
     acc_hold_type = 0
 
+  # kinematic stopping distance for ESP stopping coordinator: d = v² / (2|a|)
+  if acc07_stopping:
+    decel = max(abs(accel), 0.1)
+    anhalteweg = min(v_ego ** 2 / (2.0 * decel), 20.45)
+  else:
+    anhalteweg = 20.46  # Neutralwert
+
   acc_07_values = {
-    "ACC_Anhalteweg": 0.3 if acc07_stopping else 20.46,  # Distance to stop (stopping coordinator handles terminal roll-out)
+    "ACC_Anhalteweg": anhalteweg,
     "ACC_Freilauf_Info": 2 if acc_enabled else 0,
     "ACC_Folgebeschl": 3.02,  # Not using secondary controller accel unless and until we understand its impact
     "ACC_Sollbeschleunigung_02": accel if acc_enabled else 3.01,

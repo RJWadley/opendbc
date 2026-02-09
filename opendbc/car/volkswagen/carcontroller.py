@@ -155,7 +155,7 @@ class CarController(CarControllerBase):
 
         can_sends.extend(self.CCS.create_acc_accel_control(self.packer_pt, self.CAN.pt, CS.acc_type, long_active, accel,
                                                             acc_control, stopping, starting, CS.esp_hold_confirmation,
-                                                            esp_stopping_override, esp_starting_override))
+                                                            esp_stopping_override, esp_starting_override, v_ego=CS.out.vEgo))
 
       #if self.aeb_available:
       #  if self.frame % self.CCP.AEB_CONTROL_STEP == 0:
