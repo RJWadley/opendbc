@@ -147,7 +147,7 @@ class CarController(CarControllerBase):
               esp_starting_override = False
 
             # a) ensure SRBM actually restarts by sending a smaller brake request during the reset
-            if accel < 0 and CS.tsk_braking_request == 0:
+            if accel < 0 and (CS.esp_hold_confirmation or CS.esp_stopping_confirmation):
               accel = -1.5
             # b) prevent accidental rollback during a hold
             elif accel < 0:
