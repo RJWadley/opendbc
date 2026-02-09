@@ -160,7 +160,11 @@ static bool volkswagen_mqb_tx_hook(const CANPacket_t *msg) {
       desired_accel = (((msg->data[7] << 3) | ((msg->data[6] & 0xE0U) >> 5)) * 5U) - 7220U;
     }
 
-    violation |= longitudinal_accel_checks(desired_accel, VOLKSWAGEN_MQB_LONG_LIMITS);
+    // at standstill, allow stronger braking for hill hold (-7.0 m/s2 vs -3.5 m/s2)
+    int min_accel = vehicle_moving ? VOLKSWAGEN_MQB_LONG_LIMITS.min_accel : -7000;
+    bool accel_valid = get_longitudinal_allowed() && !safety_max_limit_check(desired_accel, VOLKSWAGEN_MQB_LONG_LIMITS.max_accel, min_accel);
+    bool accel_inactive = desired_accel == VOLKSWAGEN_MQB_LONG_LIMITS.inactive_accel;
+    violation |= !(accel_valid || accel_inactive);
 
     if (violation) {
       tx = false;

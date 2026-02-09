@@ -148,7 +148,7 @@ class CarController(CarControllerBase):
 
               # on hill, prevent accidental rollback during a hold
               if accel < 0:
-                accel = self.CCP.ACCEL_MIN
+                accel = self.CCP.ACCEL_MIN_STANDSTILL
               # on hill, prevent getting stuck during a takeoff attempt
               else:
                 accel = max(accel, 1)

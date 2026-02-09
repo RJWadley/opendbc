@@ -68,6 +68,7 @@ class CarControllerParams:
 
   ACCEL_MAX = 2.0                          # 2.0 m/s max acceleration
   ACCEL_MIN = -3.5                         # 3.5 m/s max deceleration
+  ACCEL_MIN_STANDSTILL = -7.0              # stronger braking at standstill for hill hold
 
   def __init__(self, CP):
     can_define = CANDefine(DBC[CP.carFingerprint][Bus.pt])

@@ -9,6 +9,7 @@ from opendbc.car.volkswagen.values import VolkswagenSafetyFlags
 
 MAX_ACCEL = 2.0
 MIN_ACCEL = -3.5
+MIN_ACCEL_STANDSTILL = -7.0
 
 MSG_ESP_19 = 0xB2       # RX from ABS, for wheel speeds
 MSG_LH_EPS_03 = 0x9F    # RX from EPS, for driver steering torque
@@ -197,6 +198,8 @@ class TestVolkswagenMqbLongSafety(TestVolkswagenMqbSafetyBase):
     self.assertFalse(self.safety.get_controls_allowed(), "controls allowed after ACC main switch off")
 
   def test_accel_safety_check(self):
+    # set vehicle as moving so the normal (non-standstill) limits apply
+    self._rx(self._speed_msg(1))
     for controls_allowed in [True, False]:
       # enforce we don't skip over 0 or inactive accel
       for accel in np.concatenate((np.arange(MIN_ACCEL - 2, MAX_ACCEL + 2, 0.03), [0, self.INACTIVE_ACCEL])):
@@ -210,6 +213,20 @@ class TestVolkswagenMqbLongSafety(TestVolkswagenMqbSafetyBase):
         self.assertEqual(send, self._tx(self._acc_07_msg(accel)), (controls_allowed, accel))
         # ensure the optional secondary accel field remains inactive for now
         self.assertEqual(is_inactive_accel, self._tx(self._acc_07_msg(accel, secondary_accel=accel)), (controls_allowed, accel))
+
+  def test_accel_safety_check_standstill(self):
+    # at standstill, stronger braking is allowed for hill hold (-7.0 m/s2 vs -3.5 m/s2)
+    self._rx(self._speed_msg(0))
+    for controls_allowed in [True, False]:
+      # enforce we don't skip over 0 or inactive accel
+      # stay within DBC physical range [-7.22, 3.005] to avoid unsigned wrapping in CAN packer
+      for accel in np.concatenate((np.arange(-7.21, 3.0, 0.03), [0, self.INACTIVE_ACCEL])):
+        accel = round(accel, 2)
+        is_inactive_accel = accel == self.INACTIVE_ACCEL
+        send = (controls_allowed and MIN_ACCEL_STANDSTILL <= accel <= MAX_ACCEL) or is_inactive_accel
+        self.safety.set_controls_allowed(controls_allowed)
+        self.assertEqual(send, self._tx(self._acc_06_msg(accel)), (controls_allowed, accel))
+        self.assertEqual(send, self._tx(self._acc_07_msg(accel)), (controls_allowed, accel))
 
 
 if __name__ == "__main__":
