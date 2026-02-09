@@ -123,7 +123,7 @@ class CarController(CarControllerBase):
         if (long_active and self.CCS == mqbcan and CS.acc_type == 1 and CS.esp_standstill_confirmation):
 
           # when stopped on a hill bypass second timer by restarting SRBM
-          if CS.tsk_grade > 2 and self.braking_request_counter >= 25 and CS.tsk_braking_request:
+          if CS.tsk_grade > 2 and self.braking_request_counter >= 25:
             esp_stopping_override = True
             esp_starting_override = False
 
