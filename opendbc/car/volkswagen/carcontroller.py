@@ -147,11 +147,11 @@ class CarController(CarControllerBase):
           #   accel = max(accel, 1.5)
 
           if self.braking_request_counter % 26 == 24:
-            esp_stopping_override = False
-            esp_starting_override = True
-          elif self.braking_request_counter % 26 == 25:
             esp_stopping_override = True
             esp_starting_override = False
+          elif self.braking_request_counter % 26 == 25:
+            esp_stopping_override = False
+            esp_starting_override = True
           else:
             esp_stopping_override = False
             esp_starting_override = False
