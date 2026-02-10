@@ -136,15 +136,15 @@ class CarController(CarControllerBase):
           #   esp_stopping_override = False
           #   esp_starting_override = True
 
-          # # SRBM needs a change in accel to trigger a restart
-          # if CS.esp_hold_confirmation:
-          #   accel = -1.5
-          # # on hill, maximize braking to prevent accidental rollback during a hold
-          # elif CS.tsk_grade > 2 and accel < 0:
-          #   accel = self.CCP.ACCEL_MIN
-          # # on hill, prevent getting stuck during a takeoff attempt
-          # elif CS.tsk_grade > 2:
-          #   accel = max(accel, 1.5)
+          # SRBM needs a change in accel to trigger a restart
+          if CS.esp_hold_confirmation:
+            accel = -1.5
+          # on hill, maximize braking to prevent accidental rollback during a hold
+          elif accel < 0:
+            accel = self.CCP.ACCEL_MIN
+          # on hill, prevent getting stuck during a takeoff attempt
+          else:
+            accel = max(accel, 1.5)
 
           if self.braking_request_counter % 26 == 24:
             esp_stopping_override = True
