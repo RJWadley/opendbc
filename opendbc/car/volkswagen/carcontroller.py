@@ -122,29 +122,39 @@ class CarController(CarControllerBase):
         # note: the exact grade at which uphill logic applies may need tweaking
         if (long_active and self.CCS == mqbcan and CS.acc_type == 1 and CS.esp_standstill_confirmation):
 
-          # when stopped on a hill bypass second timer by restarting SRBM
-          if CS.tsk_grade > 2 and self.braking_request_counter >= 25:
-            esp_stopping_override = True
-            esp_starting_override = False
+          # # when stopped on a hill bypass second timer by restarting SRBM
+          # if CS.tsk_grade > 2 and self.braking_request_counter >= 25:
+          #   esp_stopping_override = True
+          #   esp_starting_override = False
 
-          # bypass first timer by manually releasing the hold confirmation
-          # note that if we send more than one 'disabled' frame in a row, we'll lose brake pressure
-          elif CS.esp_hold_confirmation and CS.tsk_braking_request == 0 and self.frame % (5 * self.CCP.ACC_CONTROL_STEP) == 0:
+          # # bypass first timer by manually releasing the hold confirmation
+          # # note that if we send more than one 'disabled' frame in a row, we'll lose brake pressure
+          # elif CS.esp_hold_confirmation and CS.tsk_braking_request == 0 and self.frame % (5 * self.CCP.ACC_CONTROL_STEP) == 0:
+          #   esp_stopping_override = False
+          #   esp_starting_override = False
+          # else:
+          #   esp_stopping_override = False
+          #   esp_starting_override = True
+
+          # # SRBM needs a change in accel to trigger a restart
+          # if CS.esp_hold_confirmation:
+          #   accel = -1.5
+          # # on hill, maximize braking to prevent accidental rollback during a hold
+          # elif CS.tsk_grade > 2 and accel < 0:
+          #   accel = self.CCP.ACCEL_MIN
+          # # on hill, prevent getting stuck during a takeoff attempt
+          # elif CS.tsk_grade > 2:
+          #   accel = max(accel, 1.5)
+
+          if self.braking_request_counter % 26 == 24:
             esp_stopping_override = False
+            esp_starting_override = True
+          elif self.braking_request_counter % 26 == 25:
+            esp_stopping_override = True
             esp_starting_override = False
           else:
             esp_stopping_override = False
-            esp_starting_override = True
-
-          # SRBM needs a change in accel to trigger a restart
-          if CS.esp_hold_confirmation:
-            accel = -1.5
-          # on hill, maximize braking to prevent accidental rollback during a hold
-          elif CS.tsk_grade > 2 and accel < 0:
-            accel = self.CCP.ACCEL_MIN
-          # on hill, prevent getting stuck during a takeoff attempt
-          elif CS.tsk_grade > 2:
-            accel = max(accel, 1.5)
+            esp_starting_override = False
 
         can_sends.extend(self.CCS.create_acc_accel_control(self.packer_pt, self.CAN.pt, CS.acc_type, long_active, accel,
                                                             acc_control, stopping, starting, CS.esp_hold_confirmation,
