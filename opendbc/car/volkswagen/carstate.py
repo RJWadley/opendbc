@@ -23,6 +23,7 @@ class CarState(CarStateBase):
     self.distance_button_pressed = False
     self.upscale_lead_car_signal = False
     self.eps_stock_values = False
+    self.esp_33_stock = {}
     self.acc_type = 0
 
   def update_button_enable(self, buttonEvents: list[structs.CarState.ButtonEvent]):
@@ -109,6 +110,7 @@ class CarState(CarStateBase):
       self.esp_stopping_confirmation = bool(pt_cp.vl["ESP_21"]["ESP_Anhaltevorgang_ACC_aktiv"])
       self.esp_standstill_confirmation = pt_cp.vl["ESP_21"]["ESP_v_Signal"] == 0
       self.esp_brake_unavailable = bool(pt_cp.vl["ESP_33"].get("ESC_TSK_SRBM_nicht_verfuegbar", 0))
+      self.esp_33_stock = pt_cp.vl["ESP_33"]
       self.tsk_braking_request = pt_cp.vl["TSK_06"]["TSK_Radbremsmom"]
       self.tsk_grade = pt_cp.vl["Motor_16"]["TSK_Steigung"]
       acc_limiter_mode = ext_cp.vl["ACC_02"]["ACC_Gesetzte_Zeitluecke"] == 0
@@ -341,6 +343,7 @@ class CarState(CarStateBase):
 
     return {
       Bus.pt: CANParser(DBC[CP.carFingerprint][Bus.pt], pt_messages, CanBus(CP).pt),
+      Bus.aux: CANParser(DBC[CP.carFingerprint][Bus.pt], [], CanBus(CP).aux),
       Bus.cam: CANParser(DBC[CP.carFingerprint][Bus.pt], cam_messages, CanBus(CP).cam),
     }
 

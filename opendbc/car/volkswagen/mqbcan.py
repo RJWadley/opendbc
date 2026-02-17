@@ -31,6 +31,15 @@ def create_eps_update(packer, bus, eps_stock_values, ea_simulated_torque):
   return packer.make_can_msg("LH_EPS_03", bus, values)
 
 
+def create_esp_33_spoof(packer, bus, esp_33_stock):
+  values = esp_33_stock
+  values.update({
+    "COUNTER": (esp_33_stock["COUNTER"] + 1) % 16,
+    "ESC_TSK_SRBM_nicht_verfuegbar": 0,
+  })
+  return packer.make_can_msg("ESP_33", bus, values)
+
+
 def create_lka_hud_control(packer, bus, ldw_stock_values, lat_active, steering_pressed, hud_alert, hud_control):
   values = {}
   if len(ldw_stock_values):

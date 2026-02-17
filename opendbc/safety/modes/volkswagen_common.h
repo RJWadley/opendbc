@@ -29,6 +29,7 @@ bool volkswagen_brake_pressure_detected = false;
 #define MSG_GRA_ACC_01       0x12BU   // TX by OP, ACC control buttons for cancel/resume
 #define MSG_ACC_07           0x12EU   // TX by OP, ACC control instructions to the drivetrain coordinator
 #define MSG_ACC_02           0x30CU   // TX by OP, ACC HUD data to the instrument cluster
+#define MSG_ESP_33           0x1ABU   // TX by OP, counter-spoofing ESP SRBM status on ACAN
 #define MSG_LDW_02           0x397U   // TX by OP, Lane line recognition and text alerts
 #define MSG_MOTOR_14         0x3BEU   // RX from ECU, for brake switch status
 

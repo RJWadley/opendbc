@@ -30,6 +30,7 @@ class CarController(CarControllerBase):
     self.braking_request_counter = 0
     self.braking_unavailable_counter = 0
     self.gra_acc_counter_last = None
+    self.esp_33_counter_last = None
     self.eps_timer_soft_disable_alert = False
     self.distance_button_was_stopped = None
     self.hca_frame_timer_running = 0
@@ -165,6 +166,15 @@ class CarController(CarControllerBase):
       #    can_sends.append(self.CCS.create_aeb_control(self.packer_pt, False, False, 0.0))
       #  if self.frame % self.CCP.AEB_HUD_STEP == 0:
       #    can_sends.append(self.CCS.create_aeb_hud(self.packer_pt, False, False))
+
+    # **** ESP_33 Counter Spoof ******************************************** #
+    # spoof ESP_33 on ACAN (bus 1) so the ECU sees SRBM as available.
+    # counter+1 supersedes the real message forwarded by the gateway from FCAN.
+    # the ESP on FCAN never sees this because gateway doesn't forward ESP messages back.
+    if self.CCS == mqbcan:
+      if CS.esp_33_stock.get("COUNTER") != self.esp_33_counter_last:
+        can_sends.append(self.CCS.create_esp_33_spoof(self.packer_pt, self.CAN.aux, CS.esp_33_stock))
+      self.esp_33_counter_last = CS.esp_33_stock.get("COUNTER")
 
     # **** HUD Controls ***************************************************** #
 
