@@ -146,8 +146,12 @@ class CarController(CarControllerBase):
           # else:
           #   accel = max(accel, 1.5)
 
-          esp_stopping_override = False
-          esp_starting_override = True
+          if (CS.esp_hold_confirmation):
+            esp_stopping_override = False
+            esp_starting_override = False
+          else:
+            esp_stopping_override = False
+            esp_starting_override = True
 
         can_sends.extend(self.CCS.create_acc_accel_control(self.packer_pt, self.CAN.pt, CS.acc_type, long_active, accel,
                                                             acc_control, stopping, starting, CS.esp_hold_confirmation,
