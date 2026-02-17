@@ -89,7 +89,7 @@ class CarController(CarControllerBase):
       if self.frame % self.CCP.ACC_CONTROL_STEP == 0:
         esp_stopping_override = None
         esp_starting_override = None
-        long_active = False if CS.out.brakePressed and CS.acc_type == 1 else CC.longActive # acc type 1 is sensitive to signals when brake pressed (i.e. preEnabled)
+        long_active = False if CS.esp_brake_unavailable else False if CS.out.brakePressed and CS.acc_type == 1 else CC.longActive # acc type 1 is sensitive to signals when brake pressed (i.e. preEnabled)
 
         acc_control = self.CCS.acc_control_value(CS.out.cruiseState.available, CS.out.accFaulted, long_active)
         accel = float(np.clip(actuators.accel, self.CCP.ACCEL_MIN, self.CCP.ACCEL_MAX) if long_active else 0)

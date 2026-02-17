@@ -17,6 +17,7 @@ class CarState(CarStateBase):
     self.button_states = {button.event_type: False for button in self.CCP.BUTTONS}
     self.esp_hold_confirmation = False
     self.esp_standstill_confirmation = False
+    self.esp_brake_unavailable = False
     self.tsk_braking_request = 0
     self.tsk_grade = 0
     self.distance_button_pressed = False
@@ -107,6 +108,7 @@ class CarState(CarStateBase):
       self.esp_hold_confirmation = bool(pt_cp.vl["ESP_21"]["ESP_Haltebestaetigung"])
       self.esp_stopping_confirmation = bool(pt_cp.vl["ESP_21"]["ESP_Anhaltevorgang_ACC_aktiv"])
       self.esp_standstill_confirmation = pt_cp.vl["ESP_21"]["ESP_v_Signal"] == 0
+      self.esp_brake_unavailable = bool(pt_cp.vl["ESP_33"].get("ESC_TSK_SRBM_nicht_verfuegbar", 0))
       self.tsk_braking_request = pt_cp.vl["TSK_06"]["TSK_Radbremsmom"]
       self.tsk_grade = pt_cp.vl["Motor_16"]["TSK_Steigung"]
       acc_limiter_mode = ext_cp.vl["ACC_02"]["ACC_Gesetzte_Zeitluecke"] == 0
