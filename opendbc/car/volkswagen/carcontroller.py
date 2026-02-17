@@ -28,6 +28,7 @@ class CarController(CarControllerBase):
 
     self.apply_torque_last = 0
     self.braking_request_counter = 0
+    self.braking_unavailable_counter = 0
     self.gra_acc_counter_last = None
     self.eps_timer_soft_disable_alert = False
     self.distance_button_was_stopped = None
@@ -90,8 +91,9 @@ class CarController(CarControllerBase):
         esp_stopping_override = None
         esp_starting_override = None
         long_active = False if CS.esp_brake_unavailable else False if CS.out.brakePressed and CS.acc_type == 1 else CC.longActive # acc type 1 is sensitive to signals when brake pressed (i.e. preEnabled)
+        acc_faulted = CS.out.accFaulted or CS.esp_brake_unavailable
 
-        acc_control = self.CCS.acc_control_value(CS.out.cruiseState.available, CS.out.accFaulted, long_active)
+        acc_control = self.CCS.acc_control_value(CS.out.cruiseState.available, acc_faulted, long_active)
         accel = float(np.clip(actuators.accel, self.CCP.ACCEL_MIN, self.CCP.ACCEL_MAX) if long_active else 0)
         stopping = actuators.longControlState == LongCtrlState.stopping if long_active else False
         starting = actuators.longControlState == LongCtrlState.pid and (CS.esp_hold_confirmation or CS.out.vEgo < self.CP.vEgoStopping) if long_active else False
@@ -100,14 +102,15 @@ class CarController(CarControllerBase):
         if CS.distance_button_pressed:
           if self.distance_button_was_stopped is None:
             self.distance_button_was_stopped = CS.esp_standstill_confirmation
-          if self.distance_button_was_stopped:
-            accel = 1
-            stopping = False
-            starting = CS.out.vEgo < self.CP.vEgoStopping if long_active else False
-          else:
-            accel = min(-1.5, accel)
-            stopping = CS.out.vEgo < self.CP.vEgoStopping if long_active else False
-            starting = False
+          if long_active:
+            if self.distance_button_was_stopped:
+              accel = 1
+              stopping = False
+              starting = CS.out.vEgo < self.CP.vEgoStopping if long_active else False
+            else:
+              accel = min(-1.5, accel)
+              stopping = CS.out.vEgo < self.CP.vEgoStopping if long_active else False
+              starting = False
         else:
           self.distance_button_was_stopped = None
 
@@ -152,6 +155,17 @@ class CarController(CarControllerBase):
           else:
             esp_stopping_override = False
             esp_starting_override = True
+
+
+        if CS.esp_brake_unavailable:
+          self.braking_unavailable_counter += 1
+        else:
+          self.braking_unavailable_counter = 0
+
+        if self.braking_unavailable_counter == 1:
+          esp_stopping_override = False
+          esp_starting_override = False
+
 
         can_sends.extend(self.CCS.create_acc_accel_control(self.packer_pt, self.CAN.pt, CS.acc_type, long_active, accel,
                                                             acc_control, stopping, starting, CS.esp_hold_confirmation,

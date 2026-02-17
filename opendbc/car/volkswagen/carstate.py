@@ -117,7 +117,7 @@ class CarState(CarStateBase):
       ret.cruiseState.available = pt_cp.vl["TSK_06"]["TSK_Status"] in (2, 3, 4, 5)
       ret.cruiseState.enabled = pt_cp.vl["TSK_06"]["TSK_Status"] in (3, 4, 5)
       ret.cruiseState.speed = ext_cp.vl["ACC_02"]["ACC_Wunschgeschw_02"] * CV.KPH_TO_MS if self.CP.pcmCruise else 0
-      ret.accFaulted = pt_cp.vl["TSK_06"]["TSK_Status"] in (6, 7)
+      ret.accFaulted = pt_cp.vl["TSK_06"]["TSK_Status"] in (6, 7) and not self.esp_brake_unavailable
 
       ret.leftBlinker = bool(pt_cp.vl["Blinkmodi_02"]["Comfort_Signal_Left"])
       ret.rightBlinker = bool(pt_cp.vl["Blinkmodi_02"]["Comfort_Signal_Right"])
