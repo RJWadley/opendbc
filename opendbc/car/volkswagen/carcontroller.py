@@ -162,7 +162,7 @@ class CarController(CarControllerBase):
         else:
           self.braking_unavailable_counter = 0
 
-        if self.braking_unavailable_counter == 1:
+        if self.esp_brake_unavailable and long_active:
           stopping = False
           starting = True
           accel = 3.01
