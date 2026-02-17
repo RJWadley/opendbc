@@ -156,17 +156,6 @@ class CarController(CarControllerBase):
             esp_stopping_override = False
             esp_starting_override = True
 
-
-        if CS.esp_brake_unavailable:
-          self.braking_unavailable_counter += 1
-        else:
-          self.braking_unavailable_counter = 0
-
-        if CS.esp_brake_unavailable and long_active:
-          stopping = False
-          starting = True
-          accel = 3.01
-
         can_sends.extend(self.CCS.create_acc_accel_control(self.packer_pt, self.CAN.pt, CS.acc_type, long_active, accel,
                                                             acc_control, stopping, starting, CS.esp_hold_confirmation,
                                                             esp_stopping_override, esp_starting_override))
