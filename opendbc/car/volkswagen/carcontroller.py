@@ -140,11 +140,11 @@ class CarController(CarControllerBase):
           # if CS.esp_hold_confirmation:
           #   accel = -1.5
           # on hill, maximize braking to prevent accidental rollback during a hold
-          # if accel < 0:
-          #   accel = self.CCP.ACCEL_MIN
-          # # on hill, prevent getting stuck during a takeoff attempt
-          # else:
-          #   accel = max(accel, 1.5)
+          if accel < 0:
+            accel = self.CCP.ACCEL_MIN
+          # on hill, prevent getting stuck during a takeoff attempt
+          else:
+            accel = max(accel, 1.5)
 
           if (CS.esp_hold_confirmation):
             esp_stopping_override = False
