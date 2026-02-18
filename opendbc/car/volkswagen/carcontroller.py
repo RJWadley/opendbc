@@ -92,24 +92,25 @@ class CarController(CarControllerBase):
       if self.frame % self.CCP.ACC_CONTROL_STEP == 0:
         esp_stopping_override = None
         esp_starting_override = None
+        long_active = False if CS.out.brakePressed and CS.acc_type == 1 else CC.longActive # acc type 1 is sensitive to signals when brake pressed (i.e. preEnabled)
 
-        acc_control = self.CCS.acc_control_value(CS.out.cruiseState.available, CS.out.accFaulted, CC.longActive)
-        accel = float(np.clip(actuators.accel, self.CCP.ACCEL_MIN, self.CCP.ACCEL_MAX) if CC.longActive else 0)
-        stopping = actuators.longControlState == LongCtrlState.stopping if CC.longActive else False
-        starting = actuators.longControlState == LongCtrlState.pid and (CS.esp_hold_confirmation or CS.out.vEgo < self.CP.vEgoStopping) if CC.longActive else False
+        acc_control = self.CCS.acc_control_value(CS.out.cruiseState.available, CS.out.accFaulted, long_active)
+        accel = float(np.clip(actuators.accel, self.CCP.ACCEL_MIN, self.CCP.ACCEL_MAX) if long_active else 0)
+        stopping = actuators.longControlState == LongCtrlState.stopping if long_active else False
+        starting = actuators.longControlState == LongCtrlState.pid and (CS.esp_hold_confirmation or CS.out.vEgo < self.CP.vEgoStopping) if long_active else False
 
         # distance button debug helper, force stop or start when distance button is pressed
         if CS.distance_button_pressed:
           if self.distance_button_was_stopped is None:
             self.distance_button_was_stopped = CS.esp_standstill_confirmation
-          if CC.longActive:
+          if long_active:
             if self.distance_button_was_stopped:
               accel = 1
               stopping = False
-              starting = CS.out.vEgo < self.CP.vEgoStopping if CC.longActive else False
+              starting = CS.out.vEgo < self.CP.vEgoStopping if long_active else False
             else:
               accel = min(-1.5, accel)
-              stopping = CS.out.vEgo < self.CP.vEgoStopping if CC.longActive else False
+              stopping = CS.out.vEgo < self.CP.vEgoStopping if long_active else False
               starting = False
         else:
           self.distance_button_was_stopped = None
@@ -123,7 +124,7 @@ class CarController(CarControllerBase):
         # the first (hold confirmation timeout) is around 60-70 frames of hold confirmation
         # the second (SRBM timeout) only applies on hills, and the timing varies between 1-3 seconds of SRBM active
         # note: the exact grade at which uphill logic applies may need tweaking
-        if (CC.longActive and self.CCS == mqbcan and CS.acc_type == 1 and CS.esp_standstill_confirmation):
+        if (long_active and self.CCS == mqbcan and CS.acc_type == 1 and CS.esp_standstill_confirmation):
 
           # when stopped on a hill bypass second timer by restarting SRBM
           # if CS.tsk_grade > 2 and self.braking_request_counter >= 25:
@@ -156,7 +157,7 @@ class CarController(CarControllerBase):
             esp_stopping_override = False
             esp_starting_override = True
 
-        can_sends.extend(self.CCS.create_acc_accel_control(self.packer_pt, self.CAN.pt, CS.acc_type, CC.longActive, accel,
+        can_sends.extend(self.CCS.create_acc_accel_control(self.packer_pt, self.CAN.pt, CS.acc_type, long_active, accel,
                                                             acc_control, stopping, starting, CS.esp_hold_confirmation,
                                                             esp_stopping_override, esp_starting_override))
 
@@ -179,8 +180,8 @@ class CarController(CarControllerBase):
         can_sends.append(self.CCS.create_esp_05_spoof(self.packer_pt, self.CAN.aux, CS.esp_05_stock))
       self.esp_05_counter_last = CS.esp_05_stock.get("COUNTER")
 
-      if CS.esp_brake_unavailable and CS.tsk_06_stock.get("COUNTER") != self.tsk_06_counter_last:
-        can_sends.append(self.CCS.create_tsk_06_spoof(self.packer_pt, self.CAN.aux, CS.tsk_06_stock, tsk_radbremsmom=0))
+      if CS.tsk_06_stock.get("COUNTER") != self.tsk_06_counter_last:
+        can_sends.append(self.CCS.create_tsk_06_spoof(self.packer_pt, self.CAN.aux, CS.tsk_06_stock, CS.esp_brake_unavailable))
       self.tsk_06_counter_last = CS.tsk_06_stock.get("COUNTER")
 
     # **** HUD Controls ***************************************************** #

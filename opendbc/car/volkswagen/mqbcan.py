@@ -54,12 +54,15 @@ def create_esp_05_spoof(packer, bus, esp_05_stock):
   return packer.make_can_msg("ESP_05", bus, values)
 
 
-def create_tsk_06_spoof(packer, bus, tsk_06_stock, tsk_radbremsmom=0):
-  values = tsk_06_stock
-  values.update({
-    "COUNTER": (tsk_06_stock["COUNTER"] + 1) % 16,
-    "TSK_Radbremsmom": tsk_radbremsmom,
-  })
+def create_tsk_06_spoof(packer, bus, tsk_06_stock, brake_unavailable=False):
+  values = tsk_06_stock.copy()
+  values["COUNTER"] = (tsk_06_stock["COUNTER"] + 1) % 16
+  if brake_unavailable:
+    values.update({
+      "TSK_Radbremsmom": 0,
+      "TSK_Standby_Anf_ESP": 0,
+      "TSK_Freig_Verzoeg_Anf": 0
+    })
   return packer.make_can_msg("TSK_06", bus, values)
 
 
