@@ -171,7 +171,7 @@ class CarController(CarControllerBase):
     # spoof ESP_33 on ACAN (bus 1) so the ECU sees SRBM as available.
     # counter+1 supersedes the real message forwarded by the gateway from FCAN.
     # the ESP on FCAN never sees this because gateway doesn't forward ESP messages back.
-    if self.CCS == mqbcan and CC.longActive:
+    if self.CCS == mqbcan:
       if CS.esp_33_stock.get("COUNTER") != self.esp_33_counter_last:
         can_sends.append(self.CCS.create_esp_33_spoof(self.packer_pt, self.CAN.aux, CS.esp_33_stock))
       self.esp_33_counter_last = CS.esp_33_stock.get("COUNTER")
