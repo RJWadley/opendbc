@@ -171,17 +171,17 @@ class CarController(CarControllerBase):
     # spoof ESP_33 on ACAN (bus 1) so the ECU sees SRBM as available.
     # counter+1 supersedes the real message forwarded by the gateway from FCAN.
     # the ESP on FCAN never sees this because gateway doesn't forward ESP messages back.
-    if self.CCS == mqbcan:
+    if self.CCS == mqbcan and CC.longActive:
       if CS.esp_33_stock.get("COUNTER") != self.esp_33_counter_last:
-        can_sends.append(self.CCS.create_esp_33_spoof(self.packer_pt, self.CAN.aux, CC.longActive, CS.esp_33_stock))
+        can_sends.append(self.CCS.create_esp_33_spoof(self.packer_pt, self.CAN.aux, CS.esp_33_stock))
       self.esp_33_counter_last = CS.esp_33_stock.get("COUNTER")
 
       if CS.esp_05_stock.get("COUNTER") != self.esp_05_counter_last:
-        can_sends.append(self.CCS.create_esp_05_spoof(self.packer_pt, self.CAN.aux, CC.longActive, CS.esp_05_stock))
+        can_sends.append(self.CCS.create_esp_05_spoof(self.packer_pt, self.CAN.aux, CS.esp_05_stock))
       self.esp_05_counter_last = CS.esp_05_stock.get("COUNTER")
 
       if CS.tsk_06_stock.get("COUNTER") != self.tsk_06_counter_last:
-        can_sends.append(self.CCS.create_tsk_06_spoof(self.packer_pt, self.CAN.aux, CC.longActive, CS.tsk_06_stock, CS.esp_brake_unavailable))
+        can_sends.append(self.CCS.create_tsk_06_spoof(self.packer_pt, self.CAN.aux, CS.tsk_06_stock, CS.esp_brake_unavailable))
       self.tsk_06_counter_last = CS.tsk_06_stock.get("COUNTER")
 
     # **** HUD Controls ***************************************************** #

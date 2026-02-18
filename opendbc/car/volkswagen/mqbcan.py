@@ -31,10 +31,10 @@ def create_eps_update(packer, bus, eps_stock_values, ea_simulated_torque):
   return packer.make_can_msg("LH_EPS_03", bus, values)
 
 
-def create_esp_33_spoof(packer, bus, long_active, esp_33_stock):
+def create_esp_33_spoof(packer, bus, esp_33_stock):
   values = esp_33_stock.copy()
   values["COUNTER"] = (esp_33_stock["COUNTER"] + 1) % 16
-  if (long_active and esp_33_stock["ESC_TSK_SRBM_nicht_verfuegbar"] == 1):
+  if (esp_33_stock["ESC_TSK_SRBM_nicht_verfuegbar"] == 1):
     values.update({
       "ESC_TSK_SRBM_nicht_verfuegbar": 0,
       "ESC_Verz_Reg_aktiv": 4,  # Aktivitaet_durch_TSK
@@ -43,10 +43,10 @@ def create_esp_33_spoof(packer, bus, long_active, esp_33_stock):
   return packer.make_can_msg("ESP_33", bus, values)
 
 
-def create_esp_05_spoof(packer, bus, long_active, esp_05_stock):
+def create_esp_05_spoof(packer, bus, esp_05_stock):
   values = esp_05_stock.copy()
   values["COUNTER"] = (esp_05_stock["COUNTER"] + 1) % 16
-  if (long_active and esp_05_stock["ECD_nicht_verfuegbar"] == 1):
+  if (esp_05_stock["ECD_nicht_verfuegbar"] == 1):
     values.update({
       "ESP_Verz_TSK_aktiv": 1,
       "ECD_nicht_verfuegbar": 0,
@@ -54,10 +54,10 @@ def create_esp_05_spoof(packer, bus, long_active, esp_05_stock):
   return packer.make_can_msg("ESP_05", bus, values)
 
 
-def create_tsk_06_spoof(packer, bus, long_active, tsk_06_stock, brake_unavailable=False):
+def create_tsk_06_spoof(packer, bus, tsk_06_stock, brake_unavailable=False):
   values = tsk_06_stock.copy()
   values["COUNTER"] = (tsk_06_stock["COUNTER"] + 1) % 16
-  if (long_active and brake_unavailable):
+  if (brake_unavailable):
     values.update({
       "TSK_Radbremsmom": 0,
       "TSK_Standby_Anf_ESP": 0,
