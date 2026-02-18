@@ -32,7 +32,7 @@ def create_eps_update(packer, bus, eps_stock_values, ea_simulated_torque):
 
 
 def create_esp_33_spoof(packer, bus, esp_33_stock):
-  values = esp_33_stock
+  values = esp_33_stock.copy()
   values.update({
     "COUNTER": (esp_33_stock["COUNTER"] + 1) % 16,
     "ESC_TSK_SRBM_nicht_verfuegbar": 0,
