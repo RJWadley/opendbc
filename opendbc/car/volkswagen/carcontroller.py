@@ -33,7 +33,6 @@ class CarController(CarControllerBase):
     self.esp_05_counter_last = None
     self.tsk_06_counter_last = None
     self.eps_timer_soft_disable_alert = False
-    self.distance_button_was_stopped = None
     self.hca_frame_timer_running = 0
     self.hca_frame_same_torque = 0
 
@@ -98,22 +97,6 @@ class CarController(CarControllerBase):
         accel = float(np.clip(actuators.accel, self.CCP.ACCEL_MIN, self.CCP.ACCEL_MAX) if long_active else 0)
         stopping = actuators.longControlState == LongCtrlState.stopping if long_active else False
         starting = actuators.longControlState == LongCtrlState.pid and (CS.esp_hold_confirmation or CS.out.vEgo < self.CP.vEgoStopping) if long_active else False
-
-        # distance button debug helper, force stop or start when distance button is pressed
-        if CS.distance_button_pressed:
-          if self.distance_button_was_stopped is None:
-            self.distance_button_was_stopped = CS.esp_standstill_confirmation
-          if long_active:
-            if self.distance_button_was_stopped:
-              accel = 1
-              stopping = False
-              starting = CS.out.vEgo < self.CP.vEgoStopping if long_active else False
-            else:
-              accel = min(-1.5, accel)
-              stopping = CS.out.vEgo < self.CP.vEgoStopping if long_active else False
-              starting = False
-        else:
-          self.distance_button_was_stopped = None
 
         if CS.tsk_braking_request > 0:
           self.braking_request_counter += 1
@@ -180,8 +163,9 @@ class CarController(CarControllerBase):
         can_sends.append(self.CCS.create_esp_05_spoof(self.packer_pt, self.CAN.aux, CS.esp_05_stock))
       self.esp_05_counter_last = CS.esp_05_stock.get("COUNTER")
 
+      tsk_zwangszusch_esp = 1 if CS.distance_button_pressed else None
       if CS.tsk_06_stock.get("COUNTER") != self.tsk_06_counter_last:
-        can_sends.append(self.CCS.create_tsk_06_spoof(self.packer_pt, self.CAN.aux, CS.tsk_06_stock, CS.esp_brake_unavailable))
+        can_sends.append(self.CCS.create_tsk_06_spoof(self.packer_pt, self.CAN.aux, CS.tsk_06_stock, CS.esp_brake_unavailable, tsk_zwangszusch_esp))
       self.tsk_06_counter_last = CS.tsk_06_stock.get("COUNTER")
 
     # **** HUD Controls ***************************************************** #
