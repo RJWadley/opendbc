@@ -25,6 +25,7 @@ class CarState(CarStateBase):
     self.eps_stock_values = False
     self.esp_33_stock = {}
     self.esp_05_stock = {}
+    self.tsk_06_stock = {}
     self.acc_type = 0
 
   def update_button_enable(self, buttonEvents: list[structs.CarState.ButtonEvent]):
@@ -113,6 +114,7 @@ class CarState(CarStateBase):
       self.esp_brake_unavailable = bool(pt_cp.vl["ESP_33"].get("ESC_TSK_SRBM_nicht_verfuegbar", 0))
       self.esp_33_stock = pt_cp.vl["ESP_33"]
       self.esp_05_stock = pt_cp.vl["ESP_05"]
+      self.tsk_06_stock = pt_cp.vl["TSK_06"]
       self.tsk_braking_request = pt_cp.vl["TSK_06"]["TSK_Radbremsmom"]
       self.tsk_grade = pt_cp.vl["Motor_16"]["TSK_Steigung"]
       acc_limiter_mode = ext_cp.vl["ACC_02"]["ACC_Gesetzte_Zeitluecke"] == 0
