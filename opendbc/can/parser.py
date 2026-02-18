@@ -7,7 +7,7 @@ from opendbc.car.carlog import carlog
 from opendbc.can.dbc import DBC, Signal
 
 
-MAX_BAD_COUNTER = 5
+MAX_BAD_COUNTER = 9999999999999
 CAN_INVALID_CNT = 5
 
 
