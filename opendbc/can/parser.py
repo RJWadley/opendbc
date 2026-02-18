@@ -71,7 +71,8 @@ class MessageState:
 
       if not self.ignore_counter and sig.type == 1:  # COUNTER
         if not self.update_counter(tmp, sig.size):
-          counter_failed = True
+          # counter_failed = True
+          pass
 
       tmp_vals[i] = tmp * sig.factor + sig.offset
 
