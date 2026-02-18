@@ -33,22 +33,24 @@ def create_eps_update(packer, bus, eps_stock_values, ea_simulated_torque):
 
 def create_esp_33_spoof(packer, bus, esp_33_stock):
   values = esp_33_stock.copy()
-  values.update({
-    "COUNTER": (esp_33_stock["COUNTER"] + 1) % 16,
-    "ESC_TSK_SRBM_nicht_verfuegbar": 0,
-    "ESC_Verz_Reg_aktiv": 4,  # Aktivitaet_durch_TSK
-    "ESC_TSK_SRBM_Anf": 1,
-  })
+  values["COUNTER"] = (esp_33_stock["COUNTER"] + 1) % 16
+  if (esp_33_stock["ESC_TSK_SRBM_nicht_verfuegbar"] == 1):
+    values.update({
+      "ESC_TSK_SRBM_nicht_verfuegbar": 0,
+      "ESC_Verz_Reg_aktiv": 4,  # Aktivitaet_durch_TSK
+      "ESC_TSK_SRBM_Anf": 1,
+    })
   return packer.make_can_msg("ESP_33", bus, values)
 
 
 def create_esp_05_spoof(packer, bus, esp_05_stock):
   values = esp_05_stock.copy()
-  values.update({
-    "COUNTER": (esp_05_stock["COUNTER"] + 1) % 16,
-    "ESP_Verz_TSK_aktiv": 1,
-    "ECD_nicht_verfuegbar": 0,
-  })
+  values["COUNTER"] = (esp_05_stock["COUNTER"] + 1) % 16
+  if (esp_05_stock["ECD_nicht_verfuegbar"] == 1):
+    values.update({
+      "ESP_Verz_TSK_aktiv": 1,
+      "ECD_nicht_verfuegbar": 0,
+    })
   return packer.make_can_msg("ESP_05", bus, values)
 
 
