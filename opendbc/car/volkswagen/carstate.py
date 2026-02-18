@@ -61,6 +61,7 @@ class CarState(CarStateBase):
       return self.update_mlb(pt_cp, cam_cp, ext_cp)
 
     ret = structs.CarState()
+    aux_cp = can_parsers[Bus.aux]
 
     if self.CP.transmissionType == TransmissionType.direct:
       ret.gearShifter = self.parse_gear_shifter(self.CCP.shifter_values.get(pt_cp.vl["Motor_EV_01"]["MO_Waehlpos"], None))
@@ -114,16 +115,16 @@ class CarState(CarStateBase):
       self.esp_brake_unavailable = bool(pt_cp.vl["ESP_33"].get("ESC_TSK_SRBM_nicht_verfuegbar", 0))
       self.esp_33_stock = pt_cp.vl["ESP_33"]
       self.esp_05_stock = pt_cp.vl["ESP_05"]
-      self.tsk_06_stock = pt_cp.vl["TSK_06"]
-      self.tsk_braking_request = pt_cp.vl["TSK_06"]["TSK_Radbremsmom"]
+      self.tsk_06_stock = aux_cp.vl["TSK_06"]
+      self.tsk_braking_request = aux_cp.vl["TSK_06"]["TSK_Radbremsmom"]
       self.tsk_grade = pt_cp.vl["Motor_16"]["TSK_Steigung"]
       acc_limiter_mode = ext_cp.vl["ACC_02"]["ACC_Gesetzte_Zeitluecke"] == 0
-      speed_limiter_mode = bool(pt_cp.vl["TSK_06"]["TSK_Limiter_ausgewaehlt"])
+      speed_limiter_mode = bool(aux_cp.vl["TSK_06"]["TSK_Limiter_ausgewaehlt"])
 
-      ret.cruiseState.available = pt_cp.vl["TSK_06"]["TSK_Status"] in (2, 3, 4, 5)
-      ret.cruiseState.enabled = pt_cp.vl["TSK_06"]["TSK_Status"] in (3, 4, 5)
+      ret.cruiseState.available = aux_cp.vl["TSK_06"]["TSK_Status"] in (2, 3, 4, 5)
+      ret.cruiseState.enabled = aux_cp.vl["TSK_06"]["TSK_Status"] in (3, 4, 5)
       ret.cruiseState.speed = ext_cp.vl["ACC_02"]["ACC_Wunschgeschw_02"] * CV.KPH_TO_MS if self.CP.pcmCruise else 0
-      ret.accFaulted = pt_cp.vl["TSK_06"]["TSK_Status"] in (6, 7)
+      ret.accFaulted = aux_cp.vl["TSK_06"]["TSK_Status"] in (6, 7)
 
       ret.leftBlinker = bool(pt_cp.vl["Blinkmodi_02"]["Comfort_Signal_Left"])
       ret.rightBlinker = bool(pt_cp.vl["Blinkmodi_02"]["Comfort_Signal_Right"])

@@ -64,7 +64,7 @@ class TestVolkswagenMqbSafetyBase(common.CarSafetyTest, common.DriverTorqueSteer
     else:
       tsk_status = 0
     values = {"TSK_Status": tsk_status}
-    return self.packer.make_can_msg_safety("TSK_06", 0, values)
+    return self.packer.make_can_msg_safety("TSK_06", 1, values)
 
   def _pcm_status_msg(self, enable):
     return self._tsk_status_msg(enable)

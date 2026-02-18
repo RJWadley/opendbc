@@ -18,7 +18,7 @@ static safety_config volkswagen_mqb_init(uint16_t param) {
     {.msg = {{MSG_ESP_19, 0, 8, 100U, .ignore_checksum = true, .ignore_counter = true, .ignore_quality_flag = true}, { 0 }, { 0 }}},
     {.msg = {{MSG_LH_EPS_03, 0, 8, 100U, .max_counter = 15U, .ignore_quality_flag = true}, { 0 }, { 0 }}},
     {.msg = {{MSG_ESP_05, 0, 8, 50U, .max_counter = 15U, .ignore_quality_flag = true}, { 0 }, { 0 }}},
-    {.msg = {{MSG_TSK_06, 0, 8, 50U, .max_counter = 15U, .ignore_quality_flag = true}, { 0 }, { 0 }}},
+    {.msg = {{MSG_TSK_06, 1, 8, 50U, .max_counter = 15U, .ignore_quality_flag = true}, { 0 }, { 0 }}},
     {.msg = {{MSG_MOTOR_20, 0, 8, 50U, .max_counter = 15U, .ignore_quality_flag = true}, { 0 }, { 0 }}},
     {.msg = {{MSG_MOTOR_14, 0, 8, 10U, .ignore_checksum = true, .ignore_counter = true, .ignore_quality_flag = true}, { 0 }, { 0 }}},
     {.msg = {{MSG_GRA_ACC_01, 0, 8, 33U, .max_counter = 15U, .ignore_quality_flag = true}, { 0 }, { 0 }}},
@@ -57,23 +57,6 @@ static void volkswagen_mqb_rx_hook(const CANPacket_t *msg) {
       update_sample(&torque_driver, volkswagen_mlb_mqb_driver_input_torque(msg));
     }
 
-    if (msg->addr == MSG_TSK_06) {
-      // When using stock ACC, enter controls on rising edge of stock ACC engage, exit on disengage
-      // Always exit controls on main switch off
-      // Signal: TSK_06.TSK_Status
-      int acc_status = (msg->data[3] & 0x7U);
-      bool cruise_engaged = (acc_status == 3) || (acc_status == 4) || (acc_status == 5);
-      acc_main_on = cruise_engaged || (acc_status == 2);
-
-      if (!volkswagen_longitudinal) {
-        pcm_cruise_check(cruise_engaged);
-      }
-
-      if (!acc_main_on) {
-        controls_allowed = false;
-      }
-    }
-
     if (msg->addr == MSG_GRA_ACC_01) {
       // If using openpilot longitudinal, enter controls on falling edge of Set or Resume with main switch on
       // Signal: GRA_ACC_01.GRA_Tip_Setzen
@@ -110,6 +93,26 @@ static void volkswagen_mqb_rx_hook(const CANPacket_t *msg) {
     }
 
     brake_pressed = volkswagen_brake_pedal_switch || volkswagen_brake_pressure_detected;
+  }
+
+  // RX TSK_06 from bus 1 (aux/ACAN) to match our spoof bus and avoid a feedback loop
+  if (msg->bus == 1U) {
+    if (msg->addr == MSG_TSK_06) {
+      // When using stock ACC, enter controls on rising edge of stock ACC engage, exit on disengage
+      // Always exit controls on main switch off
+      // Signal: TSK_06.TSK_Status
+      int acc_status = (msg->data[3] & 0x7U);
+      bool cruise_engaged = (acc_status == 3) || (acc_status == 4) || (acc_status == 5);
+      acc_main_on = cruise_engaged || (acc_status == 2);
+
+      if (!volkswagen_longitudinal) {
+        pcm_cruise_check(cruise_engaged);
+      }
+
+      if (!acc_main_on) {
+        controls_allowed = false;
+      }
+    }
   }
 }
 
