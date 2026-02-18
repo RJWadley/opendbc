@@ -36,6 +36,8 @@ def create_esp_33_spoof(packer, bus, esp_33_stock):
   values.update({
     "COUNTER": (esp_33_stock["COUNTER"] + 1) % 16,
     "ESC_TSK_SRBM_nicht_verfuegbar": 0,
+    "ESC_Verz_Reg_aktiv": 4,  # Aktivitaet_durch_TSK
+    "ESC_TSK_SRBM_Anf": 1,
   })
   return packer.make_can_msg("ESP_33", bus, values)
 
