@@ -42,6 +42,16 @@ def create_esp_33_spoof(packer, bus, esp_33_stock):
   return packer.make_can_msg("ESP_33", bus, values)
 
 
+def create_esp_05_spoof(packer, bus, esp_05_stock):
+  values = esp_05_stock.copy()
+  values.update({
+    "COUNTER": (esp_05_stock["COUNTER"] + 1) % 16,
+    "ESP_Verz_TSK_aktiv": 1,
+    "ECD_nicht_verfuegbar": 0,
+  })
+  return packer.make_can_msg("ESP_05", bus, values)
+
+
 def create_lka_hud_control(packer, bus, ldw_stock_values, lat_active, steering_pressed, hud_alert, hud_control):
   values = {}
   if len(ldw_stock_values):

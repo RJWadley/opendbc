@@ -31,6 +31,7 @@ class CarController(CarControllerBase):
     self.braking_unavailable_counter = 0
     self.gra_acc_counter_last = None
     self.esp_33_counter_last = None
+    self.esp_05_counter_last = None
     self.eps_timer_soft_disable_alert = False
     self.distance_button_was_stopped = None
     self.hca_frame_timer_running = 0
@@ -175,6 +176,10 @@ class CarController(CarControllerBase):
       if CS.esp_33_stock.get("COUNTER") != self.esp_33_counter_last:
         can_sends.append(self.CCS.create_esp_33_spoof(self.packer_pt, self.CAN.aux, CS.esp_33_stock))
       self.esp_33_counter_last = CS.esp_33_stock.get("COUNTER")
+
+      if CS.esp_05_stock.get("COUNTER") != self.esp_05_counter_last:
+        can_sends.append(self.CCS.create_esp_05_spoof(self.packer_pt, self.CAN.aux, CS.esp_05_stock))
+      self.esp_05_counter_last = CS.esp_05_stock.get("COUNTER")
 
     # **** HUD Controls ***************************************************** #
 
