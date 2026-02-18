@@ -7,7 +7,7 @@ from opendbc.car.carlog import carlog
 from opendbc.can.dbc import DBC, Signal
 
 
-MAX_BAD_COUNTER = 9999999999999
+MAX_BAD_COUNTER = 5
 CAN_INVALID_CNT = 5
 
 
@@ -71,8 +71,7 @@ class MessageState:
 
       if not self.ignore_counter and sig.type == 1:  # COUNTER
         if not self.update_counter(tmp, sig.size):
-          # counter_failed = True
-          pass
+          counter_failed = True
 
       tmp_vals[i] = tmp * sig.factor + sig.offset
 
