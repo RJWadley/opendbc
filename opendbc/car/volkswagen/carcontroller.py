@@ -29,9 +29,6 @@ class CarController(CarControllerBase):
     self.apply_torque_last = 0
     self.braking_request_counter = 0
     self.gra_acc_counter_last = None
-    self.esp_33_counter_last = None
-    self.esp_05_counter_last = None
-    self.tsk_06_counter_last = None
     self.eps_timer_soft_disable_alert = False
     self.hca_frame_timer_running = 0
     self.hca_frame_same_torque = 0
@@ -149,24 +146,6 @@ class CarController(CarControllerBase):
       #    can_sends.append(self.CCS.create_aeb_control(self.packer_pt, False, False, 0.0))
       #  if self.frame % self.CCP.AEB_HUD_STEP == 0:
       #    can_sends.append(self.CCS.create_aeb_hud(self.packer_pt, False, False))
-
-    # **** ESP_33 Counter Spoof ******************************************** #
-    # spoof ESP_33 on ACAN (bus 1) so the ECU sees SRBM as available.
-    # counter+1 supersedes the real message forwarded by the gateway from FCAN.
-    # the ESP on FCAN never sees this because gateway doesn't forward ESP messages back.
-    if self.CCS == mqbcan:
-      if CS.esp_33_stock.get("COUNTER") != self.esp_33_counter_last:
-        can_sends.append(self.CCS.create_esp_33_spoof(self.packer_pt, self.CAN.aux, CS.esp_33_stock))
-      self.esp_33_counter_last = CS.esp_33_stock.get("COUNTER")
-
-      if CS.esp_05_stock.get("COUNTER") != self.esp_05_counter_last:
-        can_sends.append(self.CCS.create_esp_05_spoof(self.packer_pt, self.CAN.aux, CS.esp_05_stock))
-      self.esp_05_counter_last = CS.esp_05_stock.get("COUNTER")
-
-      tsk_zwangszusch_esp = 1 if CS.distance_button_pressed else None
-      if CS.tsk_06_stock.get("COUNTER") != self.tsk_06_counter_last:
-        can_sends.append(self.CCS.create_tsk_06_spoof(self.packer_pt, self.CAN.aux, CS.tsk_06_stock, CS.esp_brake_unavailable, tsk_zwangszusch_esp))
-      self.tsk_06_counter_last = CS.tsk_06_stock.get("COUNTER")
 
     # **** HUD Controls ***************************************************** #
 

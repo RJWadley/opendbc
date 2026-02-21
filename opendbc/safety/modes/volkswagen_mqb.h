@@ -3,6 +3,13 @@
 #include "opendbc/safety/declarations.h"
 #include "opendbc/safety/modes/volkswagen_common.h"
 
+#ifdef STM32H7
+void can_set_checksum(CANPacket_t *packet);
+void can_send(CANPacket_t *to_push, uint8_t bus_number, bool skip_tx_hook);
+#endif
+
+static bool volkswagen_mqb_brake_unavailable = false;
+
 static safety_config volkswagen_mqb_init(uint16_t param) {
   // Transmit of GRA_ACC_01 is allowed on bus 0 and 2 to keep compatibility with gateway and camera integration
   // MSG_LH_EPS_03: openpilot needs to replace apparent driver steering input torque to pacify VW Emergency Assist
@@ -18,6 +25,7 @@ static safety_config volkswagen_mqb_init(uint16_t param) {
     {.msg = {{MSG_ESP_19, 0, 8, 100U, .ignore_checksum = true, .ignore_counter = true, .ignore_quality_flag = true}, { 0 }, { 0 }}},
     {.msg = {{MSG_LH_EPS_03, 0, 8, 100U, .max_counter = 15U, .ignore_quality_flag = true}, { 0 }, { 0 }}},
     {.msg = {{MSG_ESP_05, 0, 8, 50U, .max_counter = 15U, .ignore_quality_flag = true}, { 0 }, { 0 }}},
+    {.msg = {{MSG_ESP_33, 0, 8, 50U, .max_counter = 15U, .ignore_quality_flag = true}, { 0 }, { 0 }}},
     {.msg = {{MSG_TSK_06, 1, 8, 50U, .max_counter = 15U, .ignore_quality_flag = true}, { 0 }, { 0 }}},
     {.msg = {{MSG_MOTOR_20, 0, 8, 50U, .max_counter = 15U, .ignore_quality_flag = true}, { 0 }, { 0 }}},
     {.msg = {{MSG_MOTOR_14, 0, 8, 10U, .ignore_checksum = true, .ignore_counter = true, .ignore_quality_flag = true}, { 0 }, { 0 }}},
@@ -92,6 +100,11 @@ static void volkswagen_mqb_rx_hook(const CANPacket_t *msg) {
       volkswagen_brake_pressure_detected = GET_BIT(msg, 26U);
     }
 
+    // Signal: ESP_33.ESC_TSK_SRBM_nicht_verfuegbar (used by TSK_06 spoof)
+    if (msg->addr == MSG_ESP_33) {
+      volkswagen_mqb_brake_unavailable = GET_BIT(msg, 29U);
+    }
+
     brake_pressed = volkswagen_brake_pedal_switch || volkswagen_brake_pressure_detected;
   }
 
@@ -112,6 +125,72 @@ static void volkswagen_mqb_rx_hook(const CANPacket_t *msg) {
       if (!acc_main_on) {
         controls_allowed = false;
       }
+    }
+  }
+
+  if (volkswagen_longitudinal && controls_allowed) {
+    // spoof ESP_33, ESP_05, and TSK_06 on bus 1 (ACAN) with counter+1 so our version
+    // supersedes the real message forwarded by the car's gateway. the spoof applies
+    // overrides that keep the drivetrain coordinator happy when ESP signals are unavailable
+    CANPacket_t spoof;
+    bool should_spoof = false;
+
+    if ((msg->bus == 0U) && (msg->addr == MSG_ESP_33)) {
+      spoof = *msg;
+      uint8_t counter = ((spoof.data[1] & 0x0FU) + 1U) & 0x0FU;
+      spoof.data[1] = (spoof.data[1] & 0xF0U) | counter;
+
+      if (GET_BIT(msg, 29U)) {
+        spoof.data[3] &= ~(1U << 5U);                      // clear ESC_TSK_SRBM_nicht_verfuegbar (bit 29)
+        spoof.data[3] |= (1U << 4U);                        // set ESC_TSK_SRBM_Anf (bit 28)
+        spoof.data[3] &= 0x3FU;                             // clear ESC_Verz_Reg_aktiv low bits (bits 30-31)
+        spoof.data[4] = (spoof.data[4] & 0xFCU) | 0x01U;   // set ESC_Verz_Reg_aktiv = 4 (bits 32-33)
+      }
+
+      spoof.data[0] = (uint8_t)volkswagen_mqb_meb_compute_crc(&spoof);
+      spoof.bus = 1U;
+      should_spoof = true;
+
+    } else if ((msg->bus == 0U) && (msg->addr == MSG_ESP_05)) {
+      spoof = *msg;
+      uint8_t counter = ((spoof.data[1] & 0x0FU) + 1U) & 0x0FU;
+      spoof.data[1] = (spoof.data[1] & 0xF0U) | counter;
+
+      if (GET_BIT(msg, 33U)) {
+        spoof.data[3] |= (1U << 3U);    // set ESP_Verz_TSK_aktiv (bit 27)
+        spoof.data[4] &= ~(1U << 1U);   // clear ECD_nicht_verfuegbar (bit 33)
+      }
+
+      spoof.data[0] = (uint8_t)volkswagen_mqb_meb_compute_crc(&spoof);
+      spoof.bus = 1U;
+      should_spoof = true;
+
+    } else if ((msg->bus == 1U) && (msg->addr == MSG_TSK_06)) {
+      spoof = *msg;
+      uint8_t counter = ((spoof.data[1] & 0x0FU) + 1U) & 0x0FU;
+      spoof.data[1] = (spoof.data[1] & 0xF0U) | counter;
+
+      if (volkswagen_mqb_brake_unavailable) {
+        spoof.data[1] &= 0x0FU;           // zero TSK_Radbremsmom high nibble (bits 12-15)
+        spoof.data[2] = 0x00U;            // zero TSK_Radbremsmom low byte (bits 16-23)
+        spoof.data[3] &= ~(1U << 4U);     // clear TSK_Standby_Anf_ESP (bit 28)
+        spoof.data[3] &= ~(1U << 6U);     // clear TSK_Freig_Verzoeg_Anf (bit 30)
+      }
+
+      if (!vehicle_moving) {
+        spoof.data[7] |= (1U << 1U);      // set TSK_Zwangszusch_ESP (bit 57)
+      }
+
+      spoof.data[0] = (uint8_t)volkswagen_mqb_meb_compute_crc(&spoof);
+      spoof.bus = 1U;
+      should_spoof = true;
+    }
+
+    if (should_spoof) {
+      #ifdef STM32H7
+      can_set_checksum(&spoof);
+      can_send(&spoof, spoof.bus, true);
+      #endif
     }
   }
 }

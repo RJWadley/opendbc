@@ -30,44 +30,6 @@ def create_eps_update(packer, bus, eps_stock_values, ea_simulated_torque):
 
   return packer.make_can_msg("LH_EPS_03", bus, values)
 
-
-def create_esp_33_spoof(packer, bus, esp_33_stock):
-  values = esp_33_stock.copy()
-  values["COUNTER"] = (esp_33_stock["COUNTER"] + 1) % 16
-  if (esp_33_stock["ESC_TSK_SRBM_nicht_verfuegbar"] == 1):
-    values.update({
-      "ESC_TSK_SRBM_nicht_verfuegbar": 0,
-      "ESC_Verz_Reg_aktiv": 4,  # Aktivitaet_durch_TSK
-      "ESC_TSK_SRBM_Anf": 1,
-    })
-  return packer.make_can_msg("ESP_33", bus, values)
-
-
-def create_esp_05_spoof(packer, bus, esp_05_stock):
-  values = esp_05_stock.copy()
-  values["COUNTER"] = (esp_05_stock["COUNTER"] + 1) % 16
-  if (esp_05_stock["ECD_nicht_verfuegbar"] == 1):
-    values.update({
-      "ESP_Verz_TSK_aktiv": 1,
-      "ECD_nicht_verfuegbar": 0,
-    })
-  return packer.make_can_msg("ESP_05", bus, values)
-
-
-def create_tsk_06_spoof(packer, bus, tsk_06_stock, brake_unavailable=False, tsk_zwangszusch_esp=None):
-  values = tsk_06_stock.copy()
-  values["COUNTER"] = (tsk_06_stock["COUNTER"] + 1) % 16
-  if brake_unavailable:
-    values.update({
-      "TSK_Radbremsmom": 0,
-      "TSK_Standby_Anf_ESP": 0,
-      "TSK_Freig_Verzoeg_Anf": 0
-    })
-  if tsk_zwangszusch_esp is not None:
-    values["TSK_Zwangszusch_ESP"] = tsk_zwangszusch_esp
-  return packer.make_can_msg("TSK_06", bus, values)
-
-
 def create_lka_hud_control(packer, bus, ldw_stock_values, lat_active, steering_pressed, hud_alert, hud_control):
   values = {}
   if len(ldw_stock_values):
