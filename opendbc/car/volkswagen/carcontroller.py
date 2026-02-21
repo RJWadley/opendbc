@@ -137,8 +137,8 @@ class CarController(CarControllerBase):
           #   esp_starting_override = True
 
           # SRBM needs a change in accel to trigger a restart
-          # if CS.esp_hold_confirmation:
-          #   accel = -1.5
+          if CS.esp_hold_confirmation:
+            accel = -1.5
           # on hill, maximize braking to prevent accidental rollback during a hold
           if accel < 0:
             accel = self.CCP.ACCEL_MIN
