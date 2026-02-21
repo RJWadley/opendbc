@@ -95,6 +95,22 @@ class CarController(CarControllerBase):
         stopping = actuators.longControlState == LongCtrlState.stopping if long_active else False
         starting = actuators.longControlState == LongCtrlState.pid and (CS.esp_hold_confirmation or CS.out.vEgo < self.CP.vEgoStopping) if long_active else False
 
+        # distance button debug helper, force stop or start when distance button is pressed
+        if CS.distance_button_pressed:
+          if self.distance_button_was_stopped is None:
+            self.distance_button_was_stopped = CS.esp_standstill_confirmation
+          if long_active:
+            if self.distance_button_was_stopped:
+              accel = 1
+              stopping = False
+              starting = CS.out.vEgo < self.CP.vEgoStopping if long_active else False
+            else:
+              accel = min(-1.5, accel)
+              stopping = CS.out.vEgo < self.CP.vEgoStopping if long_active else False
+              starting = False
+        else:
+          self.distance_button_was_stopped = None
+
         if CS.tsk_braking_request > 0:
           self.braking_request_counter += 1
         else:
