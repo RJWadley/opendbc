@@ -179,6 +179,37 @@ class TestMQBStandstillManagerIntegration:
       assert not cs_after["_faulted"], f"fault at frame {frame}"
       assert la_out, f"long_active dropped unexpectedly at frame {frame}"
 
+  def test_spontaneous_reacquisition_at_floor_haltemoment_detected_as_uphill(self):
+    """Flat stop (haltemoment=600, signal floor), then ESP spontaneously reacquires hold.
+
+    Manager must detect this as uphill (detected_uphill=True) and engage hill mode.
+    Without the fix, prev_starting_no_hold is never set because the raw `starting` parameter
+    is False during the stopping phase, even though the manager is effectively sending starting
+    overrides; the detection never fires and the hold faults via the hill decel timeout.
+    """
+    sim = ESPTSKSimulator(speed_ms=0.0, esp_hold_torque_nm=600.0)
+    mgr = MQBStandstillManager(CCP)
+
+    # Run a couple of frames so manager is issuing flat-starting overrides (no hold).
+    for _ in range(2):
+      _mgr_step(sim, mgr, True, 0.0, True, False)
+    assert not mgr.detected_uphill
+
+    # Arm spontaneous reacquisition; fires inside sim.step on the next _mgr_step.
+    sim.trigger_spontaneous_reacquisition = True
+    _mgr_step(sim, mgr, True, 0.0, True, False)  # hold acquires in sim during this step
+    assert sim.car_state()["esp_hold_confirmation"], "spontaneous reacquisition should have fired"
+
+    # Next manager step: sees hold=True with prev_starting_no_hold=True → detected_uphill.
+    _mgr_step(sim, mgr, True, 0.0, True, False)
+    assert mgr.detected_uphill, "spontaneous reacquisition at haltemoment=600 must be detected as uphill"
+
+    # Hill mode should now keep hold active without faulting.
+    for frame in range(60):
+      cs_after, la_out = _mgr_step(sim, mgr, True, 0.0, True, False)
+      assert not cs_after["_faulted"], f"fault in hill mode at frame {frame}"
+      assert la_out, f"long_active dropped unexpectedly at frame {frame}"
+
   def test_disable_and_reenable_long_active_on_hill(self):
     """Briefly disabling long_active pauses the hold timer; re-enabling continues safely."""
     sim = ESPTSKSimulator(speed_ms=0.0, esp_hold_torque_nm=790.0)
