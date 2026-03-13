@@ -22,6 +22,7 @@ def _make_cs(sim_state: dict, brake_pressed: bool = False):
   """Build a minimal CS-like SimpleNamespace from sim.car_state() output."""
   cs = types.SimpleNamespace()
   cs.esp_hold_confirmation = sim_state["esp_hold_confirmation"]
+  cs.esp_standstill_confirmation = sim_state["esp_standstill_confirmation"]
   cs.esp_hold_torque_nm = sim_state["esp_hold_torque_nm"]
   cs.actual_torque_nm = sim_state["actual_torque_nm"]
   cs.wheel_impulse_count = sim_state["wheel_impulse_count"]

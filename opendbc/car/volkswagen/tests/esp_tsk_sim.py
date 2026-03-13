@@ -165,6 +165,7 @@ class ESPTSKSimulator:
       "esp_hold_torque_nm": self.esp_hold_torque_nm,
       "actual_torque_nm": self.actual_torque_nm,
       "wheel_impulse_count": self.wheel_impulse_count,
+      "esp_standstill_confirmation": self.speed_ms == 0.0,
       "out.standstill": self.speed_ms == 0.0,
       "out.vEgo": self.speed_ms,
       "acc_type": 1,
