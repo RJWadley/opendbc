@@ -120,7 +120,7 @@ class MQBStandstillManager:
     # spontaneous ESP reacquisition while in flat starting mode: treat as uphill from now on
     if self.prev_starting_no_hold and CS.esp_hold_confirmation:
       self.detected_uphill = True
-    self.prev_starting_no_hold = (is_starting and not is_uphill
+    self.prev_starting_no_hold = (long_active and not is_uphill and starting
                                    and CS.out.standstill and not CS.esp_hold_confirmation)
 
     return long_active, accel, stopping, starting, esp_starting_override, esp_stopping_override

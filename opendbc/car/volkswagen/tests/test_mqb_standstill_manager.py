@@ -183,30 +183,30 @@ class TestMQBStandstillManagerIntegration:
     """Flat stop (haltemoment=600, signal floor), then ESP spontaneously reacquires hold.
 
     Manager must detect this as uphill (detected_uphill=True) and engage hill mode.
-    Without the fix, prev_starting_no_hold is never set because the raw `starting` parameter
-    is False during the stopping phase, even though the manager is effectively sending starting
-    overrides; the detection never fires and the hold faults via the hill decel timeout.
+    This requires openpilot to be in PID/starting mode (starting=True) when the
+    reacquisition happens — the detection only arms when the raw starting parameter
+    is True, not when the manager is merely overriding to starting state.
     """
     sim = ESPTSKSimulator(speed_ms=0.0, esp_hold_torque_nm=600.0)
     mgr = MQBStandstillManager(CCP)
 
-    # Run a couple of frames so manager is issuing flat-starting overrides (no hold).
+    # Run a couple of frames in starting mode (PID at standstill) with flat-starting overrides.
     for _ in range(2):
-      _mgr_step(sim, mgr, True, 0.0, True, False)
+      _mgr_step(sim, mgr, True, 0.0, False, True)
     assert not mgr.detected_uphill
 
     # Arm spontaneous reacquisition; fires inside sim.step on the next _mgr_step.
     sim.trigger_spontaneous_reacquisition = True
-    _mgr_step(sim, mgr, True, 0.0, True, False)  # hold acquires in sim during this step
+    _mgr_step(sim, mgr, True, 0.0, False, True)  # hold acquires in sim during this step
     assert sim.car_state()["esp_hold_confirmation"], "spontaneous reacquisition should have fired"
 
     # Next manager step: sees hold=True with prev_starting_no_hold=True → detected_uphill.
-    _mgr_step(sim, mgr, True, 0.0, True, False)
+    _mgr_step(sim, mgr, True, 0.0, False, True)
     assert mgr.detected_uphill, "spontaneous reacquisition at haltemoment=600 must be detected as uphill"
 
     # Hill mode should now keep hold active without faulting.
     for frame in range(60):
-      cs_after, la_out = _mgr_step(sim, mgr, True, 0.0, True, False)
+      cs_after, la_out = _mgr_step(sim, mgr, True, 0.0, False, True)
       assert not cs_after["_faulted"], f"fault in hill mode at frame {frame}"
       assert la_out, f"long_active dropped unexpectedly at frame {frame}"
 
