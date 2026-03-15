@@ -18,8 +18,8 @@ def _make_cs(sim_state: dict, brake_pressed: bool = False):
   cs = types.SimpleNamespace()
   cs.esp_hold_confirmation = sim_state["esp_hold_confirmation"]
   cs.esp_hold_uphill = sim_state["esp_hold_uphill"]
-  cs.esp_hold_torque_nm = sim_state["esp_hold_torque_nm"]
-  cs.actual_torque_nm = sim_state["actual_torque_nm"]
+  cs.esp_laengsbeschl = sim_state["esp_laengsbeschl"]
+  cs.tsk_steigung = sim_state["tsk_steigung"]
   cs.wheel_impulse_count = sim_state["wheel_impulse_count"]
   cs.acc_type = sim_state["acc_type"]
   cs.out = types.SimpleNamespace()
@@ -103,7 +103,7 @@ class TestMQBStandstillManagerIntegration:
     After the manager disables we stop; the caller (openpilot) is responsible for not sending
     further signals that would trip the hill decel timer.
     """
-    sim = ESPTSKSimulator(speed_ms=0.0, esp_hold_torque_nm=9999.0)
+    sim = ESPTSKSimulator(speed_ms=0.0, esp_hold_torque_nm=9999.0, tsk_steigung=30.0)
     mgr = MQBStandstillManager(CCP)
     disabled_at = None
     for frame in range(200):
@@ -120,9 +120,9 @@ class TestMQBStandstillManagerIntegration:
     )
 
   def test_hill_cycling_no_fault(self):
-    """On a normal hill the I-controller builds enough torque for conditional release before the
-    timer limit; the hold cycles and long_active stays True indefinitely."""
-    sim = ESPTSKSimulator(speed_ms=0.0, esp_hold_torque_nm=790.0)
+    """On a normal hill the I-controller builds enough laengsbeschl for conditional release before
+    the timer limit; the hold cycles and long_active stays True indefinitely."""
+    sim = ESPTSKSimulator(speed_ms=0.0, esp_hold_torque_nm=790.0, tsk_steigung=9.6)
     mgr = MQBStandstillManager(CCP)
     for frame in range(400):
       cs_after, la_out = _mgr_step(sim, mgr, True, 0.0, True, False)
@@ -160,7 +160,7 @@ class TestMQBStandstillManagerIntegration:
 
   def test_disable_and_reenable_long_active_on_hill(self):
     """Briefly disabling long_active pauses the hold timer; re-enabling continues safely."""
-    sim = ESPTSKSimulator(speed_ms=0.0, esp_hold_torque_nm=790.0)
+    sim = ESPTSKSimulator(speed_ms=0.0, esp_hold_torque_nm=790.0, tsk_steigung=9.6)
     mgr = MQBStandstillManager(CCP)
     # Run for a few frames to acquire and hold
     for _ in range(5):

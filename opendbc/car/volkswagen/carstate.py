@@ -16,9 +16,9 @@ class CarState(CarStateBase):
     self.CCP = CarControllerParams(CP)
     self.button_states = {button.event_type: False for button in self.CCP.BUTTONS}
     self.esp_hold_confirmation = False
-    self.esp_hold_torque_nm = 0.0
     self.esp_hold_uphill = False
-    self.actual_torque_nm = 0.0
+    self.esp_laengsbeschl = 0.0
+    self.tsk_steigung = 0.0
     self.upscale_lead_car_signal = False
     self.eps_stock_values = False
     self.acc_type = 0
@@ -118,19 +118,12 @@ class CarState(CarStateBase):
 
       # extended standstill values for acc type 1
       if self.CP.openpilotLongitudinalControl and self.acc_type == 1:
-        # ESP_15: minimum total wheel torque to hold at current slope when index=Antriebsmoment
-        esp_hold_raw = pt_cp.vl["ESP_15"]["ESP_Haltemoment"]
-        haltemoment_antrieb = pt_cp.vl["ESP_15"]["ESP_Index_Haltemoment"] == 1
-        self.esp_hold_torque_nm = esp_hold_raw if haltemoment_antrieb and esp_hold_raw < 10220 else 0.0
-        # Motor_16: TSK_Steigung is road grade in percent; use > 2% as uphill threshold since
-        # haltemoment floors at 600 Nm and doesn't meaningfully distinguish grades below ~4%
-        self.esp_hold_uphill = pt_cp.vl["Motor_16"]["TSK_Steigung"] > 2.0
-        # Motor_11: MO_Mom_Ist_Summe is unitless — multiply by MO_Faktor_Momente_02 (1/2/3 Nm/unit) for crank Nm,
-        # then by GE_Uefkt (crank→wheel ratio) to get wheel Nm comparable to ESP_Haltemoment
-        motor_torque_raw = alt_cp.vl["Motor_11"]["MO_Mom_Ist_Summe"]
-        motor_torque_factor = int(pt_cp.vl["Motor_Code_01"]["MO_Faktor_Momente_02"])
-        gear_ratio = pt_cp.vl["Getriebe_11"]["GE_Uefkt"]
-        self.actual_torque_nm = motor_torque_raw * motor_torque_factor * gear_ratio
+        # Motor_16: TSK_Steigung is road grade in percent
+        self.tsk_steigung = pt_cp.vl["Motor_16"]["TSK_Steigung"]
+        self.esp_hold_uphill = self.tsk_steigung > 2.0
+        # ESP_02: longitudinal acceleration in m/s²; gated on quality bit
+        laeng_qbit = pt_cp.vl["ESP_02"]["ESP_QBit_Laengsbeschl"]
+        self.esp_laengsbeschl = pt_cp.vl["ESP_02"]["ESP_Laengsbeschl"] if laeng_qbit else 0.0
 
       ret.cruiseState.available = pt_cp.vl["TSK_06"]["TSK_Status"] in (2, 3, 4, 5)
       ret.cruiseState.enabled = pt_cp.vl["TSK_06"]["TSK_Status"] in (3, 4, 5)

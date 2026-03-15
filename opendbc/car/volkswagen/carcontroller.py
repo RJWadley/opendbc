@@ -46,9 +46,7 @@ class MQBStandstillManager:
 
   HOLD_MAX_FRAMES = 50             # frames to hold before disabling long control to avoid a fault
   HOLD_MIN_FRAMES = 10             # minimum frames to hold at stopping state to ensure ESP engages for the first time
-  HOLD_TORQUE_DEADBAND_NM = 40     # stop integrating when this close to target torque (Nm at wheel)
-  HOLD_TORQUE_TARGET_RATIO = 0.8   # target this fraction of ESP_Haltemoment to avoid overshoot
-  HOLD_ACCEL_KI = 0.0001           # I-controller gain: m/s² per Nm of torque error per ACC_CONTROL_STEP; just a guess for now
+  LAENG_KI = 0.05                  # I-controller gain: m/s² of hill_hold_accel per m/s² of laengsbeschl error per frame
 
   def __init__(self, CCP):
     self._CCP = CCP
@@ -89,12 +87,12 @@ class MQBStandstillManager:
 
       # uphill: build engine torque via ACC_06 as rollback prevention, ESP braking held via ACC_07
       elif is_uphill and (CS.esp_hold_confirmation or CS.out.standstill):
-        # skip torque management for one frame each cycle to avoid check engine light
+        # skip laengsbeschl management for one frame each cycle to avoid check engine light
         if self.esp_hold_frames > 1:
-          error_nm = CS.esp_hold_torque_nm * self.HOLD_TORQUE_TARGET_RATIO - CS.actual_torque_nm
-          if abs(error_nm) > self.HOLD_TORQUE_DEADBAND_NM:
-            self.hill_hold_accel = float(np.clip(self.hill_hold_accel + self.HOLD_ACCEL_KI * error_nm,
-                                                 self._CCP.ACCEL_MIN, self._CCP.ACCEL_MAX))
+          target_laeng = 0.1 * CS.tsk_steigung + 0.1
+          error = target_laeng - CS.esp_laengsbeschl
+          self.hill_hold_accel = float(np.clip(self.hill_hold_accel + self.LAENG_KI * error,
+                                               self._CCP.ACCEL_MIN, self._CCP.ACCEL_MAX))
           accel = max(accel, self.hill_hold_accel)
           starting = True
           stopping = False

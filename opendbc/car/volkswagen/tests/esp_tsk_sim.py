@@ -27,9 +27,13 @@ HILL_DECEL_TIMEOUT_FRAMES = 120
 # calibrated from one data point: 790 Nm hold torque, 453 Nm insufficient, 468.1 Nm sufficient.
 TORQUE_RELEASE_RATIO = 0.583
 
-# Rough engine torque model
+# Rough engine torque model (used internally for conditional release physics)
 ENGINE_ACCEL_TO_WHEEL_TORQUE_NM = 480.0  # Nm per m/s²
 ENGINE_TORQUE_TAU_S = 0.3                # first-order lag time constant (seconds)
+
+# ESP_Laengsbeschl model
+LAENG_TAU_S = 0.14                       # ~7-frame lag at 50Hz, measured from step response
+GRAVITY_MS2_PER_PCT = 9.81 / 100        # m/s² per percent grade
 
 
 @dataclass
@@ -64,16 +68,20 @@ class ESPTSKSimulator:
   """
 
   def __init__(self, speed_ms: float = 0.0, esp_hold_torque_nm: float = 0.0,
+               tsk_steigung: float = 0.0,
                accel_to_torque_nm: float = ENGINE_ACCEL_TO_WHEEL_TORQUE_NM,
                torque_tau_s: float = ENGINE_TORQUE_TAU_S):
     self.esp = ESPState()
     self.speed_ms = speed_ms
     self.esp_hold_torque_nm = esp_hold_torque_nm
+    self.tsk_steigung = tsk_steigung
     self.actual_torque_nm: float = 0.0
+    self.esp_laengsbeschl: float = 0.0
     self.wheel_impulse_count: int = 0
     self._prev_speed_ms = speed_ms
     self._accel_to_torque_nm = accel_to_torque_nm
     self._torque_alpha = STEP_DT / torque_tau_s
+    self._laeng_alpha = STEP_DT / LAENG_TAU_S
     # Set to True to trigger a spontaneous hold reacquisition on the next eligible frame.
     # Simulates the rare ESP behavior where it reacquires hold without a stopping=True request.
     self.trigger_spontaneous_reacquisition: bool = False
@@ -108,10 +116,14 @@ class ESPTSKSimulator:
     torque_target = max(0.0, inp.acc_sollbeschl_06) * self._accel_to_torque_nm
     self.actual_torque_nm += (torque_target - self.actual_torque_nm) * self._torque_alpha
 
+    # ESP_Laengsbeschl: net of commanded accel minus gravity component, with measured lag
+    laeng_steady = inp.acc_sollbeschl_06 - GRAVITY_MS2_PER_PCT * self.tsk_steigung
+    self.esp_laengsbeschl += (laeng_steady - self.esp_laengsbeschl) * self._laeng_alpha
+
     # Wheel impulse detection (before hold logic so timer-reset uses this frame's movement).
     moved = self._update_wheel_impulses()
 
-    is_uphill = self.esp_hold_torque_nm > 600
+    is_uphill = self.tsk_steigung > 2.0
 
     # --- Hill decel timeout ---
     # TSK commands radbremsmom whenever hold is not confirmed. On a hill (or after a
@@ -162,12 +174,11 @@ class ESPTSKSimulator:
 
   def car_state(self) -> dict:
     """Return a dict of CS fields consumed by the CarController standstill logic."""
-    is_uphill = self.esp_hold_torque_nm > 600
     return {
       "esp_hold_confirmation": self.esp.hold_confirmed,
-      "esp_hold_torque_nm": self.esp_hold_torque_nm if is_uphill else 0.0,
-      "esp_hold_uphill": is_uphill,
-      "actual_torque_nm": self.actual_torque_nm,
+      "esp_hold_uphill": self.tsk_steigung > 2.0,
+      "esp_laengsbeschl": self.esp_laengsbeschl,
+      "tsk_steigung": self.tsk_steigung,
       "wheel_impulse_count": self.wheel_impulse_count,
       "out.standstill": self.speed_ms == 0.0,
       "out.vEgo": self.speed_ms,
