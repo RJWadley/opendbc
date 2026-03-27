@@ -137,6 +137,7 @@ class CarController(CarControllerBase):
     self.gra_acc_counter_last = None
     self.hca_mitigation = HCAMitigation(self.CCP)
     self.standstill_manager = MQBStandstillManager()
+    self.distance_button_was_stopped = None
 
   def update(self, CC, CS, now_nanos):
     actuators = CC.actuators
@@ -179,6 +180,22 @@ class CarController(CarControllerBase):
         if self.CCS == mqbcan and CS.acc_type == 1:
           long_active, accel, stopping, starting, esp_starting_override, esp_stopping_override = \
             self.standstill_manager.update(CS, long_active, accel, stopping, starting)
+
+        # distance button debug helper, force stop or start when distance button is pressed
+        if self.CCS == mqbcan and CS.distance_button_pressed:
+          if self.distance_button_was_stopped is None:
+            self.distance_button_was_stopped = CS.out.standstill
+          if long_active:
+            if self.distance_button_was_stopped:
+              accel = max(1.5, accel)
+              stopping = False
+              starting = CS.out.vEgo < self.CP.vEgoStopping if long_active else False
+            else:
+              accel = min(-1.5, accel)
+              stopping = CS.out.vEgo < self.CP.vEgoStopping if long_active else False
+              starting = False
+        else:
+          self.distance_button_was_stopped = None
 
         acc_control = self.CCS.acc_control_value(CS.out.cruiseState.available, CS.out.accFaulted, long_active)
         accel = float(np.clip(accel, self.CCP.ACCEL_MIN, self.CCP.ACCEL_MAX) if long_active else 0)
