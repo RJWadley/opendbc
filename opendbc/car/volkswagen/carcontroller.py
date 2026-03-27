@@ -70,13 +70,13 @@ class MQBStandstillManager:
 
     # uphill deadband: force accel away from zero proportional to grade, fades out by 5 km/h
     if long_active and CS.grade > 0:
-      hill_accel_deadzone = (CS.grade / 100) * np.interp(CS.out.vEgo, [0, 5 * CV.KPH_TO_MS], [1.0, 0.0])
+      hill_accel_deadzone = (CS.grade / 10) * np.interp(CS.out.vEgo, [0, 5 * CV.KPH_TO_MS], [1.0, 0.0])
       accel = max(accel, hill_accel_deadzone) if accel >= 0 else min(accel, -hill_accel_deadzone)
 
     # rollback detection: car rolling backward at low speed
     if long_active and CS.rolling_backward and 0 < CS.out.vEgo < 0.5 * CV.KPH_TO_MS:
       if CS.esc_warnruck_nicht_verfuegbar:
-        accel = max(accel, CS.grade / 100)
+        accel = max(accel, CS.grade / 10)
       elif CS.tsk_radbremsmom < CS.esp_haltemoment:
         aeb_brake_accel = -3.0
 
