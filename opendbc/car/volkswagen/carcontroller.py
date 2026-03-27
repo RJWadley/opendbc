@@ -195,11 +195,11 @@ class CarController(CarControllerBase):
             self.distance_button_was_stopped = CS.out.standstill
           if long_active:
             if self.distance_button_was_stopped:
-              accel = max(1.5, accel)
+              accel = max(0.1, accel)
               stopping = False
               starting = CS.out.vEgo < self.CP.vEgoStopping if long_active else False
             else:
-              accel = min(-1.5, accel)
+              accel = min(-0.1, accel)
               stopping = CS.out.vEgo < self.CP.vEgoStopping if long_active else False
               starting = False
         else:
