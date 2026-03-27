@@ -23,6 +23,9 @@ class CarState(CarStateBase):
     self.eps_stock_values = False
     self.acc_type = 0
     self.distance_button_pressed = False
+    self.tsk_radbremsmom = 0.0
+    self.esp_haltemoment = 0.0
+    self.esc_warnruck_nicht_verfuegbar = False
 
   def update_button_enable(self, buttonEvents: list[structs.CarState.ButtonEvent]):
     if not self.CP.pcmCruise:
@@ -112,6 +115,10 @@ class CarState(CarStateBase):
       self.esp_stopping = bool(pt_cp.vl["ESP_21"]["ESP_Anhaltevorgang_ACC_aktiv"])
       self.esp_hold_confirmation = bool(pt_cp.vl["ESP_21"]["ESP_Haltebestaetigung"])
       self.grade = pt_cp.vl["Motor_16"]["TSK_Steigung"]
+      self.tsk_radbremsmom = pt_cp.vl["TSK_06"]["TSK_Radbremsmom"]
+      haltemoment_raw = pt_cp.vl["ESP_15"]["ESP_Haltemoment"]
+      self.esp_haltemoment = haltemoment_raw if haltemoment_raw < 10000 else 0.0
+      self.esc_warnruck_nicht_verfuegbar = bool(pt_cp.vl["ESP_33"]["ESC_Warnruck_nicht_verfuegbar"])
       acc_limiter_mode = ext_cp.vl["ACC_02"]["ACC_Gesetzte_Zeitluecke"] == 0
       speed_limiter_mode = bool(pt_cp.vl["TSK_06"]["TSK_Limiter_ausgewaehlt"])
 

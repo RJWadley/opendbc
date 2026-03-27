@@ -52,9 +52,10 @@ class MQBStandstillManager:
     self.can_stop_forever = False
 
   def update(self, CS, long_active: bool, accel: float, stopping: bool, starting: bool
-             ) -> tuple[bool, float, bool, bool, bool | None, bool | None]:
+             ) -> tuple[bool, float, bool, bool, bool | None, bool | None, float]:
     esp_starting_override: bool | None = None
     esp_stopping_override: bool | None = None
+    aeb_brake_accel = 0.0
 
     if CS.esp_hold_confirmation:
       self.esp_hold_frames += 1
@@ -67,11 +68,17 @@ class MQBStandstillManager:
     if self.esp_hold_frames > self.HOLD_MAX_FRAMES:
       long_active = False
 
-    # on a steep hill, force accel away from zero to commit to gas or brakes and avoid rolling back or getting stuck
-    # deadzone scales with grade and fades out by 5 km/h
-    hill_accel_deadzone = (0.2 * CS.grade - 1) * np.interp(CS.out.vEgo, [0, 5 * CV.KPH_TO_MS], [1.0, 0.0])
-    if long_active and hill_accel_deadzone > 0:
+    # uphill deadband: force accel away from zero proportional to grade, fades out by 5 km/h
+    if long_active and CS.grade > 0:
+      hill_accel_deadzone = (CS.grade / 100) * np.interp(CS.out.vEgo, [0, 5 * CV.KPH_TO_MS], [1.0, 0.0])
       accel = max(accel, hill_accel_deadzone) if accel >= 0 else min(accel, -hill_accel_deadzone)
+
+    # rollback detection: car rolling backward at low speed
+    if long_active and CS.rolling_backward and 0 < CS.out.vEgo < 0.5 * CV.KPH_TO_MS:
+      if CS.esc_warnruck_nicht_verfuegbar:
+        accel = max(accel, CS.grade / 100)
+      elif CS.tsk_radbremsmom < CS.esp_haltemoment:
+        aeb_brake_accel = -3.0
 
     # end the stopping procedure right after it starts, before any hold has been confirmed
     # if a hold is confirmed before we end the stopping procedure we won't be able to hold indefinitely
@@ -115,7 +122,7 @@ class MQBStandstillManager:
       self.esp_hold_frames = 0
     self.prev_starting_hold = is_starting and CS.esp_hold_confirmation
 
-    return long_active, accel, stopping, starting, esp_starting_override, esp_stopping_override
+    return long_active, accel, stopping, starting, esp_starting_override, esp_stopping_override, aeb_brake_accel
 
 
 class CarController(CarControllerBase):
@@ -174,11 +181,12 @@ class CarController(CarControllerBase):
         accel = actuators.accel
         esp_starting_override = None
         esp_stopping_override = None
-        starting = CS.out.vEgo < self.CP.vEgoStopping and accel >= 0
+        starting = CS.out.vEgo < self.CP.vEgoStopping and (accel >= 0.2 if CS.grade > 0 else accel >= 0)
         stopping = CS.out.vEgo < self.CP.vEgoStopping and not starting
 
+        aeb_brake_accel = 0.0
         if self.CCS == mqbcan and CS.acc_type == 1:
-          long_active, accel, stopping, starting, esp_starting_override, esp_stopping_override = \
+          long_active, accel, stopping, starting, esp_starting_override, esp_stopping_override, aeb_brake_accel = \
             self.standstill_manager.update(CS, long_active, accel, stopping, starting)
 
         # distance button debug helper, force stop or start when distance button is pressed
@@ -204,9 +212,9 @@ class CarController(CarControllerBase):
                                                            acc_control, stopping, starting, CS.esp_hold_confirmation,
                                                            esp_starting_override, esp_stopping_override))
 
+      if self.CCS == mqbcan and self.frame % self.CCP.AEB_CONTROL_STEP == 0:
+        can_sends.append(self.CCS.create_aeb_control(self.packer_pt, False, False, 0.0, aeb_brake_accel))
       #if self.aeb_available:
-      #  if self.frame % self.CCP.AEB_CONTROL_STEP == 0:
-      #    can_sends.append(self.CCS.create_aeb_control(self.packer_pt, False, False, 0.0))
       #  if self.frame % self.CCP.AEB_HUD_STEP == 0:
       #    can_sends.append(self.CCS.create_aeb_hud(self.packer_pt, False, False))
 
