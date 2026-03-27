@@ -10,7 +10,8 @@ static safety_config volkswagen_mqb_init(uint16_t param) {
                                                         {MSG_LDW_02, 0, 8, .check_relay = true}, {MSG_LH_EPS_03, 2, 8, .check_relay = true}};
 
   static const CanMsg VOLKSWAGEN_MQB_LONG_TX_MSGS[] = {{MSG_HCA_01, 0, 8, .check_relay = true}, {MSG_LDW_02, 0, 8, .check_relay = true}, {MSG_LH_EPS_03, 2, 8, .check_relay = true},
-                                                       {MSG_ACC_02, 0, 8, .check_relay = true}, {MSG_ACC_06, 0, 8, .check_relay = true}, {MSG_ACC_07, 0, 8, .check_relay = true}};
+                                                       {MSG_ACC_02, 0, 8, .check_relay = true}, {MSG_ACC_06, 0, 8, .check_relay = true}, {MSG_ACC_07, 0, 8, .check_relay = true},
+                                                       {MSG_ACC_10, 0, 8, .check_relay = true}};
 
   static RxCheck volkswagen_mqb_rx_checks[] = {
     {.msg = {{MSG_ESP_19, 0, 8, 100U, .ignore_checksum = true, .ignore_counter = true, .ignore_quality_flag = true}, { 0 }, { 0 }}},
@@ -164,6 +165,22 @@ static bool volkswagen_mqb_tx_hook(const CANPacket_t *msg) {
 
     if (violation) {
       tx = false;
+    }
+  }
+
+  // Safety check for ACC_10 partial braking requests (ANB_Teilbremsung_Freigabe / ANB_Zielbrems_Teilbrems_Verz_Anf)
+  // Signal: ACC_10.ANB_Teilbremsung_Freigabe (bit 28)
+  // Signal: ACC_10.ANB_Zielbremsung_Freigabe (bit 39) - target braking, not used by OP, must always be 0
+  // Signal: ACC_10.ANB_Zielbrems_Teilbrems_Verz_Anf (bit 29|10, scale 0.024, offset -20.016)
+  if (msg->addr == MSG_ACC_10) {
+    bool anb_teilbremsung = GET_BIT(msg, 28U);
+    bool anb_zielbremsung = GET_BIT(msg, 39U);
+    if (anb_teilbremsung || anb_zielbremsung) {
+      int desired_accel = (int)(((msg->data[4] & 0x7FU) << 3) | ((msg->data[3] >> 5) & 0x7U));
+      int desired_accel_mss = (desired_accel * 24) - 20016;
+      if (anb_zielbremsung || longitudinal_accel_checks(desired_accel_mss, VOLKSWAGEN_MQB_LONG_LIMITS)) {
+        tx = false;
+      }
     }
   }
 

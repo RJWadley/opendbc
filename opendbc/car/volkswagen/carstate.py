@@ -117,7 +117,8 @@ class CarState(CarStateBase):
       self.grade = pt_cp.vl["Motor_16"]["TSK_Steigung"]
       self.tsk_radbremsmom = pt_cp.vl["TSK_06"]["TSK_Radbremsmom"]
       haltemoment_raw = pt_cp.vl["ESP_15"]["ESP_Haltemoment"]
-      self.esp_haltemoment = haltemoment_raw if haltemoment_raw < 10000 else 0.0
+      haltemoment_antrieb = pt_cp.vl["ESP_15"]["ESP_Index_Haltemoment"] == 1
+      self.esp_haltemoment = haltemoment_raw if haltemoment_antrieb and haltemoment_raw < 10220 else 0.0
       self.esc_warnruck_nicht_verfuegbar = bool(pt_cp.vl["ESP_33"]["ESC_Warnruck_nicht_verfuegbar"])
       acc_limiter_mode = ext_cp.vl["ACC_02"]["ACC_Gesetzte_Zeitluecke"] == 0
       speed_limiter_mode = bool(pt_cp.vl["TSK_06"]["TSK_Limiter_ausgewaehlt"])
