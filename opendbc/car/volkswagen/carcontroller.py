@@ -74,10 +74,11 @@ class MQBStandstillManager:
       accel = max(accel, hill_accel_deadzone) if accel >= 0 else min(accel, -hill_accel_deadzone)
 
     # rollback detection: car rolling backward at low speed
-    if long_active and CS.rolling_backward and 0 < CS.out.vEgo < 0.5 * CV.KPH_TO_MS:
+    if long_active and CS.rolling_backward:
       if CS.esc_warnruck_nicht_verfuegbar:
         accel = max(accel, CS.grade / 10)
       elif CS.tsk_radbremsmom < CS.esp_haltemoment:
+        accel = min(accel, -3.5)
         aeb_brake_accel = -3.0
 
     # end the stopping procedure right after it starts, before any hold has been confirmed
