@@ -13,6 +13,7 @@ class CarState(CarStateBase):
     super().__init__(CP)
     self.frame = 0
     self.eps_init_complete = False
+    self.sent_hca_count = 0
     self.CCP = CarControllerParams(CP)
     self.button_states = {button.event_type: False for button in self.CCP.BUTTONS}
     self.esp_hold_confirmation = False
@@ -242,6 +243,11 @@ class CarState(CarStateBase):
     return self.low_speed_alert
 
   def update_hca_state(self, hca_status, drive_mode=True):
+    # Ignore EPS state until openpilot has started sending HCA_01, to avoid latching eps_init_complete
+    # from transient EPS states (e.g. READY -> FAULT) that occur before openpilot participates on the bus
+    if self.sent_hca_count <= 10:
+      return True, False
+
     # Treat FAULT as temporary for worst likely EPS recovery time, for cars without factory Lane Assist
     # DISABLED means the EPS hasn't been configured to support Lane Assist
     self.eps_init_complete = self.eps_init_complete or (hca_status in ("DISABLED", "READY", "ACTIVE") or self.frame > 600)
