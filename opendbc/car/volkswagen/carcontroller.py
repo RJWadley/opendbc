@@ -8,6 +8,7 @@ from opendbc.car.volkswagen import mlbcan, mqbcan, pqcan
 from opendbc.car.volkswagen.values import CanBus, CarControllerParams, VolkswagenFlags
 
 VisualAlert = structs.CarControl.HUDControl.VisualAlert
+LongCtrlState = structs.CarControl.Actuators.LongControlState
 
 
 class HCAMitigation:
@@ -89,8 +90,6 @@ class MQBStandstillManager:
       if CS.esp_stopping:
         self.can_stop_forever = True
       if self.esp_hold_frames > 0:
-        self.can_stop_forever = False
-      if not (stopping or starting):
         self.can_stop_forever = False
       if CS.grade >= 10: # the car can hold on these grades, but TSK won't command brake fast enough to prevent rollback
         self.can_stop_forever = False
@@ -192,8 +191,8 @@ class CarController(CarControllerBase):
         accel = actuators.accel
         esp_starting_override = None
         esp_stopping_override = None
-        starting = CS.out.vEgo < self.CP.vEgoStopping and accel >= 0
-        stopping = CS.out.vEgo < self.CP.vEgoStopping and not starting
+        stopping = actuators.longControlState == LongCtrlState.stopping
+        starting = actuators.longControlState == LongCtrlState.pid and (CS.esp_hold_confirmation or CS.out.vEgo < self.CP.vEgoStopping)
 
         # distance button debug helper, force stop or start when distance button is pressed
         if self.CCS == mqbcan and CS.distance_button_pressed:
