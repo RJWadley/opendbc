@@ -84,13 +84,14 @@ class TestVolkswagenMQBStandstillManager(unittest.TestCase):
     mgr.update(self._cs(grade=10), long_active=True, accel=-1.0, stopping=True, starting=False)
     assert mgr.can_stop_forever
 
-  def test_can_stop_forever_cleared_when_not_stopping_or_starting(self):
-    """can_stop_forever is cleared when neither stopping nor starting, e.g. during a resume."""
+  def test_can_stop_forever_persists_until_hold_confirmation(self):
+    """can_stop_forever persists while long control stays active and no hold has been confirmed yet."""
     mgr = MQBStandstillManager()
     mgr.update(self._cs(esp_stopping=True), long_active=True, accel=-1.0, stopping=True, starting=False)
     assert mgr.can_stop_forever
-    mgr.update(self._cs(), long_active=True, accel=0.5, stopping=False, starting=False)
-    assert not mgr.can_stop_forever
+    *_, esp_override = mgr.update(self._cs(), long_active=True, accel=0.5, stopping=False, starting=False)
+    assert mgr.can_stop_forever
+    assert esp_override == ESPOverride.START
 
   def test_can_stop_forever_cleared_when_long_inactive(self):
     """can_stop_forever is cleared when long control is inactive."""
@@ -117,18 +118,27 @@ class TestVolkswagenMQBStandstillManager(unittest.TestCase):
       mgr.update(self._cs(v_ego=5.0 / 3.6, standstill=False), long_active=True, accel=-1.0, stopping=False, starting=True)
     assert esp_override == ESPOverride.START
 
-  def test_launch_boost_by_grade(self):
-    """Accel is boosted when grade alone exceeds the rollback threshold (grade > 5), no rollback needed."""
-    grade = 10.0  # desired_launch_accel = 0.2 * 10 - 1 = 1.0
+  def test_low_speed_uphill_enters_stop_commit_before_launch(self):
+    """Below the theoretical safe speed, uphill launch requests first commit to stopping to prevent rollback."""
+    grade = 10.0
     mgr = MQBStandstillManager()
-    _, accel, *_ = mgr.update(self._cs(grade=grade), long_active=True, accel=0.5, stopping=False, starting=True)
-    assert accel == 0.2 * grade - 1
+    _, accel, stopping, starting, esp_override = \
+      mgr.update(self._cs(grade=grade), long_active=True, accel=0.5, stopping=False, starting=True)
+    assert mgr.stop_commit_active
+    assert accel == -3.5
+    assert stopping is True
+    assert starting is False
+    assert esp_override == ESPOverride.STOP
 
-  def test_launch_boost_not_applied_above_speed_threshold(self):
-    """Accel is not boosted when vEgo >= 0.25 (no longer near-standstill)."""
+  def test_launch_boost_not_applied_above_safe_speed(self):
+    """Once speed exceeds the theoretical safe speed, uphill launch requests pass through unchanged."""
     mgr = MQBStandstillManager()
-    _, accel, *_ = mgr.update(self._cs(grade=10.0, v_ego=0.25), long_active=True, accel=0.5, stopping=False, starting=True)
+    _, accel, stopping, starting, esp_override = \
+      mgr.update(self._cs(grade=10.0, v_ego=0.8, standstill=False), long_active=True, accel=0.5, stopping=False, starting=True)
     assert accel == 0.5
+    assert stopping is False
+    assert starting is True
+    assert esp_override is None
 
   def test_rollback_brake_protection(self):
     """Accel is forced to -3.5 when rollback is active and accel is not positive."""
@@ -149,7 +159,7 @@ class TestVolkswagenMQBStandstillManager(unittest.TestCase):
   def test_hill_hold_first_frame_skip(self):
     """First frame with hold confirmed skips hill_accel to avoid a check engine light, but still sets overrides."""
     grade = 8.0
-    cs = self._cs(esp_hold_confirmation=True, grade=grade)
+    cs = self._cs(esp_hold_confirmation=True, grade=grade, v_ego=1.0)
     mgr = MQBStandstillManager()
     _, accel, _, _, esp_override = \
       mgr.update(cs, long_active=True, accel=-1.0, stopping=True, starting=False)
@@ -159,7 +169,7 @@ class TestVolkswagenMQBStandstillManager(unittest.TestCase):
   def test_hill_hold_accel_and_overrides(self):
     """Engine torque is built via hill_accel and ESP braking is held when stopped on a grade."""
     grade = 8.0
-    cs = self._cs(esp_hold_confirmation=True, grade=grade)
+    cs = self._cs(esp_hold_confirmation=True, grade=grade, v_ego=1.0)
     mgr = MQBStandstillManager()
     for _ in range(2):
       mgr.update(cs, long_active=True, accel=-1.0, stopping=True, starting=False)
@@ -170,10 +180,10 @@ class TestVolkswagenMQBStandstillManager(unittest.TestCase):
     assert stopping is False
     assert esp_override == ESPOverride.STOP
 
-  def test_hill_hold_accel_suppressed_on_flat(self):
-    """hill_accel is suppressed on grades <= 3% to prevent unnecessary engine torque on flat ground."""
+  def test_hill_hold_accel_suppressed_on_shallow_grades(self):
+    """hill_accel stays suppressed through 3% grade when the committed-stop path is not active."""
     for grade in (0.0, 1.0, 2.0, 3.0):
-      cs = self._cs(esp_hold_confirmation=True, grade=grade)
+      cs = self._cs(esp_hold_confirmation=True, grade=grade, v_ego=1.0)
       mgr = MQBStandstillManager()
       for _ in range(2):
         mgr.update(cs, long_active=True, accel=-1.0, stopping=True, starting=False)
