@@ -51,6 +51,7 @@ class CarControllerParams:
   ACC_CONTROL_STEP = 2                     # ACC_06/ACC_07/ACC_System frequency 50Hz
   AEB_CONTROL_STEP = 2                     # ACC_10 frequency 50Hz
   AEB_HUD_STEP = 20                        # ACC_15 frequency 5Hz
+  VW_LOW_SPEED_STATE_SPEED = 0.5           # always send either starting or stopping below this speed
 
   # Documented lateral limits: 3.00 Nm max, rate of change 5.00 Nm/sec.
   # MQB vs PQ maximums are shared, but rate-of-change limited differently

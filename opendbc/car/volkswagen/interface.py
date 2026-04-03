@@ -95,7 +95,7 @@ class CarInterface(CarInterfaceBase):
     if ret.flags & VolkswagenFlags.PQ:
       ret.stopAccel = -0.55
     ret.vEgoStarting = 0.1
-    ret.vEgoStopping = 0.5
+    ret.vEgoStopping = 0.5 if ret.flags & VolkswagenFlags.PQ else 0.1
     ret.autoResumeSng = ret.minEnableSpeed == -1
 
     CAN = CanBus(fingerprint=fingerprint)

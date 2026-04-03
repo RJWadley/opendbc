@@ -6,6 +6,7 @@ from types import SimpleNamespace
 from opendbc.car import DT_CTRL
 from opendbc.car.structs import CarParams
 from opendbc.car.volkswagen.carcontroller import HCAMitigation, MQBStandstillManager
+from opendbc.car.volkswagen.mqbcan import ESPOverride
 from opendbc.car.volkswagen.values import CAR, CarControllerParams as CCP, FW_QUERY_CONFIG, WMI
 from opendbc.car.volkswagen.fingerprints import FW_VERSIONS
 
@@ -62,11 +63,10 @@ class TestVolkswagenMQBStandstillManager(unittest.TestCase):
   def test_can_stop_forever_flat_stop(self):
     """ESP stopping procedure triggers can_stop_forever, overriding starting/stopping signals to hold indefinitely."""
     mgr = MQBStandstillManager()
-    *_, esp_starting_override, esp_stopping_override = \
+    *_, esp_override = \
       mgr.update(self._cs(esp_stopping=True), long_active=True, accel=-1.0, stopping=True, starting=False)
     assert mgr.can_stop_forever
-    assert esp_starting_override is True
-    assert esp_stopping_override is False
+    assert esp_override == ESPOverride.START
 
   def test_can_stop_forever_cleared_by_hold_confirmation(self):
     """can_stop_forever is cleared when ESP confirms a hold (indefinite hold is no longer possible)."""
@@ -99,6 +99,23 @@ class TestVolkswagenMQBStandstillManager(unittest.TestCase):
     assert mgr.can_stop_forever
     mgr.update(self._cs(), long_active=False, accel=-1.0, stopping=True, starting=False)
     assert not mgr.can_stop_forever
+
+  def test_stopping_override_in_4_to_6_kph_window_without_can_stop_forever(self):
+    """When can_stop_forever is unavailable, 4-6 kph should force ESP stopping and suppress starting."""
+    mgr = MQBStandstillManager()
+    *_, esp_override = \
+      mgr.update(self._cs(v_ego=5.0 / 3.6, standstill=False), long_active=True, accel=-1.0, stopping=False, starting=True)
+    assert not mgr.can_stop_forever
+    assert esp_override == ESPOverride.STOP
+
+  def test_stopping_override_not_applied_when_can_stop_forever(self):
+    """The 4-6 kph stopping override should not override can_stop_forever behavior."""
+    mgr = MQBStandstillManager()
+    mgr.update(self._cs(esp_stopping=True), long_active=True, accel=-1.0, stopping=True, starting=False)
+    assert mgr.can_stop_forever
+    *_, esp_override = \
+      mgr.update(self._cs(v_ego=5.0 / 3.6, standstill=False), long_active=True, accel=-1.0, stopping=False, starting=True)
+    assert esp_override == ESPOverride.START
 
   def test_launch_boost_by_grade(self):
     """Accel is boosted when grade alone exceeds the rollback threshold (grade > 5), no rollback needed."""
@@ -134,11 +151,10 @@ class TestVolkswagenMQBStandstillManager(unittest.TestCase):
     grade = 8.0
     cs = self._cs(esp_hold_confirmation=True, grade=grade)
     mgr = MQBStandstillManager()
-    _, accel, _, _, esp_starting_override, esp_stopping_override = \
+    _, accel, _, _, esp_override = \
       mgr.update(cs, long_active=True, accel=-1.0, stopping=True, starting=False)
     assert accel == -1.0  # hill_accel not yet applied
-    assert esp_starting_override is False
-    assert esp_stopping_override is True
+    assert esp_override == ESPOverride.STOP
 
   def test_hill_hold_accel_and_overrides(self):
     """Engine torque is built via hill_accel and ESP braking is held when stopped on a grade."""
@@ -147,13 +163,12 @@ class TestVolkswagenMQBStandstillManager(unittest.TestCase):
     mgr = MQBStandstillManager()
     for _ in range(2):
       mgr.update(cs, long_active=True, accel=-1.0, stopping=True, starting=False)
-    _, accel, stopping, starting, esp_starting_override, esp_stopping_override = \
+    _, accel, stopping, starting, esp_override = \
       mgr.update(cs, long_active=True, accel=-1.0, stopping=True, starting=False)
     assert accel == 0.045 * grade + 0.0625
     assert starting is True
     assert stopping is False
-    assert esp_starting_override is False
-    assert esp_stopping_override is True
+    assert esp_override == ESPOverride.STOP
 
   def test_hill_hold_accel_suppressed_on_flat(self):
     """hill_accel is suppressed on grades <= 3% to prevent unnecessary engine torque on flat ground."""
@@ -169,15 +184,15 @@ class TestVolkswagenMQBStandstillManager(unittest.TestCase):
     """Progressive release pulses follow the 1-on/3-off, 2-on/3-off, 3-on/3-off, hold pattern near HOLD_MAX_FRAMES."""
     cs = self._cs(esp_hold_confirmation=True, grade=0.0)
     mgr = MQBStandstillManager()
-    # Expected esp_starting_override for each frame 1..HOLD_MAX_FRAMES
+    # Expected esp_override=START for each frame 1..HOLD_MAX_FRAMES
     # Frames before release window: always False
     # Release window phases: 0=T, 1-3=F, 4-5=T, 6-8=F, 9-11=T, 12-14=F, 15+=T
     excluded_phases = {1, 2, 3, 6, 7, 8, 12, 13, 14}
     for frame in range(1, self.HOLD_MAX_FRAMES + 1):
-      *_, esp_starting_override, _ = mgr.update(cs, long_active=True, accel=-1.0, stopping=True, starting=False)
+      *_, esp_override = mgr.update(cs, long_active=True, accel=-1.0, stopping=True, starting=False)
       phase = frame - self.RELEASE_START_FRAME
-      expected = phase >= 0 and phase not in excluded_phases
-      assert esp_starting_override is expected, f"{frame=} {phase=}"
+      expected = ESPOverride.START if phase >= 0 and phase not in excluded_phases else ESPOverride.STOP
+      assert esp_override is expected, f"{frame=} {phase=}"
 
   def test_timer_resets_when_moving_without_hold(self):
     """Hold frame counter resets when wheels move without an ESP hold confirmation."""
@@ -193,7 +208,7 @@ class TestVolkswagenMQBStandstillManager(unittest.TestCase):
     """Hold frame counter resets when hold drops after a starting attempt was sent."""
     mgr = MQBStandstillManager()
     cs_held = self._cs(esp_hold_confirmation=True, grade=0.0)
-    # Run into release window so esp_starting_override=True, setting hold_timer_can_reset
+    # Run into release window so esp_override=START, setting hold_timer_can_reset
     for _ in range(self.RELEASE_START_FRAME):
       mgr.update(cs_held, long_active=True, accel=-1.0, stopping=True, starting=False)
     assert mgr.hold_timer_can_reset
