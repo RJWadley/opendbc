@@ -3,7 +3,7 @@ import re
 import unittest
 from types import SimpleNamespace
 
-from opendbc.car import DT_CTRL
+from opendbc.car import DT_CTRL, structs
 from opendbc.car.structs import CarParams
 from opendbc.car.volkswagen.carcontroller import HCAMitigation, MQBStandstillManager
 from opendbc.car.volkswagen.mqbcan import ESPOverride
@@ -346,6 +346,24 @@ class TestVolkswagenMQBStandstillManager(unittest.TestCase):
 
 
 class TestVolkswagenPlatformConfigs(unittest.TestCase):
+  def test_mqb_gap_adjust_button_held_states(self):
+    cp = structs.CarParams()
+    cp.carFingerprint = next(iter(CAR))
+    cp.transmissionType = CarParams.TransmissionType.automatic
+
+    gap_button = next(b for b in CCP(cp).BUTTONS if b.event_type == structs.CarState.ButtonEvent.Type.gapAdjustCruise)
+    assert gap_button.values == [1, 2, 3]
+
+    state = False
+    events = []
+    for raw in (0, 1, 2, 3, 0):
+      pressed = raw in gap_button.values
+      if state != pressed:
+        events.append((raw, pressed))
+      state = pressed
+
+    assert events == [(1, True), (0, False)]
+
   def test_spare_part_fw_pattern(self):
     # Relied on for determining if a FW is likely VW
     for platform, ecus in FW_VERSIONS.items():
