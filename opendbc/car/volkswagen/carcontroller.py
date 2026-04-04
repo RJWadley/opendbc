@@ -58,8 +58,8 @@ class MQBStandstillManager:
   START_INTENT_ACCEL_THRESHOLD = 0.2  # m/s^2
   START_INTENT_MIN_FRAMES = 5         # 100 ms at 50 Hz ACC update rate
   START_COMMIT_ACCEL_MIN = 0.2        # m/s^2, ensure committed launch still rolls forward
-  STOPPING_WINDOW_MIN = 4.0 * CV.KPH_TO_MS
-  STOPPING_WINDOW_MAX = 6.0 * CV.KPH_TO_MS
+  STOPPING_WINDOW_MIN = 0.5
+  STOPPING_WINDOW_MAX = 1.0
   # cycling hold
   HOLD_RELEASE_TOTAL_FRAMES = 20      # total time allotted for progressive pulses during a cycling hold
   # last resort
