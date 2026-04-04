@@ -164,6 +164,8 @@ class MQBStandstillManager:
         self.can_stop_forever = True
       if self.esp_hold_frames > 0:
         self.can_stop_forever = False
+      if CS.out.vEgo > self.STOPPING_WINDOW_MAX:
+        self.can_stop_forever = False
       if self.can_stop_forever:
         esp_override = mqbcan.ESPOverride.START
       if not self.can_stop_forever and self.STOPPING_WINDOW_MIN <= CS.out.vEgo <= self.STOPPING_WINDOW_MAX:

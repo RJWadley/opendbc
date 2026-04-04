@@ -101,6 +101,16 @@ class TestVolkswagenMQBStandstillManager(unittest.TestCase):
     mgr.update(self._cs(), long_active=False, accel=-1.0, stopping=True, starting=False)
     assert not mgr.can_stop_forever
 
+  def test_can_stop_forever_cleared_above_stopping_window(self):
+    """can_stop_forever is cleared once vehicle speed rises above the early-stop window."""
+    mgr = MQBStandstillManager()
+    mgr.update(self._cs(esp_stopping=True), long_active=True, accel=-1.0, stopping=True, starting=False)
+    assert mgr.can_stop_forever
+    *_, esp_override = mgr.update(self._cs(v_ego=7.0 / 3.6, standstill=False), long_active=True,
+                                  accel=0.0, stopping=False, starting=False)
+    assert not mgr.can_stop_forever
+    assert esp_override is None
+
   def test_stopping_override_in_4_to_6_kph_window_without_can_stop_forever(self):
     """When can_stop_forever is unavailable, 4-6 kph should force ESP stopping and suppress starting."""
     mgr = MQBStandstillManager()
