@@ -51,15 +51,14 @@ class MQBStandstillManager:
   """
 
   # simple hold
-  BRAKE_TORQUE_RAMP_RATE = 1000.0     # Nm/s
+  BRAKE_TORQUE_RAMP_RATE = 2800.0     # Nm/s
   ASSUMED_WHEEL_RADIUS = 0.328        # m, typical MQB tire rolling radius
   PERMITTED_ROLLBACK_DISTANCE = 0.0   # m, kept at zero for now but could be relaxed
   GRAVITY = 9.81                      # m/s^2
-  START_INTENT_ACCEL_THRESHOLD = 0.2  # m/s^2
+  START_INTENT_ACCEL_THRESHOLD = 0.2  # m/s^2, accel must exceed this to roll on a hill
   START_INTENT_MIN_FRAMES = 5         # 100 ms at 50 Hz ACC update rate
   START_COMMIT_ACCEL_MIN = 0.2        # m/s^2, ensure committed launch still rolls forward
-  STOPPING_WINDOW_MIN = 4.0 * CV.KPH_TO_MS
-  STOPPING_WINDOW_MAX = 6.0 * CV.KPH_TO_MS
+  WEGIMPULSE_STILLNESS_FRAMES = 10    # frames of no wheel tick change before triggering stop and allowing indefinite hold
   # cycling hold
   HOLD_RELEASE_TOTAL_FRAMES = 20      # total time allotted for progressive pulses during a cycling hold
   # last resort
@@ -74,6 +73,8 @@ class MQBStandstillManager:
     self.stop_commit_active = False
     self.start_commit_active = False
     self.start_intent_frames = 0
+    self.frames_since_wegimpulse_change = 0
+    self._prev_sum_wegimpulse: int | None = None
 
   def get_theoretical_safe_speed(self, grade_pct: float, v_ego: float) -> float:
     # Because brake torque is based off a jerk-limited speed target even at standstill, the TSK may
@@ -156,20 +157,26 @@ class MQBStandstillManager:
       stopping = False
       starting = True
 
-    # simple hold: as we approach a stop, trigger a stopping procedure very early
+    # simple hold: track wheel stillness via wegimpulse counters every frame
+    if self._prev_sum_wegimpulse is None or CS.sum_wegimpulse != self._prev_sum_wegimpulse:
+      self.frames_since_wegimpulse_change = 0
+    else:
+      self.frames_since_wegimpulse_change += 1
+    self._prev_sum_wegimpulse = CS.sum_wegimpulse
+
+    # simple hold: once wheels have been still for exactly WEGIMPULSE_STILLNESS_FRAMES, send one STOP frame
+    # to ensure the stopping procedure is initiated before we attempt to hold indefinitely
     # end the stopping procedure right after it starts, before any hold has been confirmed (hold only confirms at low speed)
     # if a hold is confirmed before we end the stopping procedure we won't be able to hold indefinitely
     if long_active:
-      if CS.esp_stopping:
+      if self.frames_since_wegimpulse_change == self.WEGIMPULSE_STILLNESS_FRAMES:
+        esp_override = mqbcan.ESPOverride.STOP
+      if CS.esp_stopping and self.frames_since_wegimpulse_change >= self.WEGIMPULSE_STILLNESS_FRAMES:
         self.can_stop_forever = True
       if self.esp_hold_frames > 0:
         self.can_stop_forever = False
-      if CS.out.vEgo > self.STOPPING_WINDOW_MAX:
-        self.can_stop_forever = False
       if self.can_stop_forever:
         esp_override = mqbcan.ESPOverride.START
-      if not self.can_stop_forever and self.STOPPING_WINDOW_MIN <= CS.out.vEgo <= self.STOPPING_WINDOW_MAX:
-        esp_override = mqbcan.ESPOverride.STOP
     else:
       self.can_stop_forever = False
 

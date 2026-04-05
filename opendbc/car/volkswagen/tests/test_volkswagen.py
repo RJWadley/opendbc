@@ -1,3 +1,4 @@
+import math
 import random
 import re
 import unittest
@@ -38,13 +39,20 @@ class TestVolkswagenMQBStandstillManager(unittest.TestCase):
   START_INTENT_ACCEL_THRESHOLD = MQBStandstillManager.START_INTENT_ACCEL_THRESHOLD
   START_INTENT_MIN_FRAMES = MQBStandstillManager.START_INTENT_MIN_FRAMES
   START_COMMIT_ACCEL_MIN = MQBStandstillManager.START_COMMIT_ACCEL_MIN
+  WEGIMPULSE_STILLNESS_FRAMES = MQBStandstillManager.WEGIMPULSE_STILLNESS_FRAMES
 
   def _cs(self, *, esp_hold_confirmation=False, esp_stopping=False, rolling_backward=False,
-          rolling_forward=False, grade=0.0, brake_pressed=False, standstill=True, v_ego=0.0):
+          rolling_forward=False, grade=0.0, brake_pressed=False, standstill=True, v_ego=0.0, sum_wegimpulse=0):
     out = SimpleNamespace(brakePressed=brake_pressed, standstill=standstill, vEgo=v_ego)
     return SimpleNamespace(out=out, esp_hold_confirmation=esp_hold_confirmation,
                            esp_stopping=esp_stopping, rolling_backward=rolling_backward,
-                           rolling_forward=rolling_forward, grade=grade)
+                           rolling_forward=rolling_forward, grade=grade, sum_wegimpulse=sum_wegimpulse)
+
+  def _prime_can_stop_forever(self, mgr, **cs_kwargs):
+    """Run WEGIMPULSE_STILLNESS_FRAMES+1 frames with constant wegimpulse and esp_stopping to set can_stop_forever."""
+    for _ in range(self.WEGIMPULSE_STILLNESS_FRAMES + 1):
+      mgr.update(self._cs(esp_stopping=True, **cs_kwargs), long_active=True, accel=-1.0, stopping=True, starting=False)
+    assert mgr.can_stop_forever
 
   def test_brake_pressed_disables_long_active(self):
     """Brake input overrides long_active to prevent faults when pre-enabled."""
@@ -61,34 +69,31 @@ class TestVolkswagenMQBStandstillManager(unittest.TestCase):
     assert not long_active
 
   def test_can_stop_forever_flat_stop(self):
-    """ESP stopping procedure triggers can_stop_forever, overriding starting/stopping signals to hold indefinitely."""
+    """can_stop_forever is set when esp_stopping is active and wheels have been still for WEGIMPULSE_STILLNESS_FRAMES."""
     mgr = MQBStandstillManager()
-    *_, esp_override = \
-      mgr.update(self._cs(esp_stopping=True), long_active=True, accel=-1.0, stopping=True, starting=False)
+    self._prime_can_stop_forever(mgr)
+    *_, esp_override = mgr.update(self._cs(), long_active=True, accel=-1.0, stopping=True, starting=False)
     assert mgr.can_stop_forever
     assert esp_override == ESPOverride.START
 
   def test_can_stop_forever_cleared_by_hold_confirmation(self):
     """can_stop_forever is cleared when ESP confirms a hold (indefinite hold is no longer possible)."""
     mgr = MQBStandstillManager()
-    mgr.update(self._cs(esp_stopping=True), long_active=True, accel=-1.0, stopping=True, starting=False)
-    assert mgr.can_stop_forever
+    self._prime_can_stop_forever(mgr)
     mgr.update(self._cs(esp_hold_confirmation=True), long_active=True, accel=-1.0, stopping=True, starting=False)
     assert not mgr.can_stop_forever
 
   def test_can_stop_forever_not_cleared_by_steep_grade(self):
     """Steep grades no longer disable can_stop_forever; rollback handling is managed separately."""
     mgr = MQBStandstillManager()
-    mgr.update(self._cs(esp_stopping=True), long_active=True, accel=-1.0, stopping=True, starting=False)
-    assert mgr.can_stop_forever
+    self._prime_can_stop_forever(mgr)
     mgr.update(self._cs(grade=10), long_active=True, accel=-1.0, stopping=True, starting=False)
     assert mgr.can_stop_forever
 
   def test_can_stop_forever_persists_until_hold_confirmation(self):
     """can_stop_forever persists while long control stays active and no hold has been confirmed yet."""
     mgr = MQBStandstillManager()
-    mgr.update(self._cs(esp_stopping=True), long_active=True, accel=-1.0, stopping=True, starting=False)
-    assert mgr.can_stop_forever
+    self._prime_can_stop_forever(mgr)
     *_, esp_override = mgr.update(self._cs(), long_active=True, accel=0.5, stopping=False, starting=False)
     assert mgr.can_stop_forever
     assert esp_override == ESPOverride.START
@@ -96,36 +101,54 @@ class TestVolkswagenMQBStandstillManager(unittest.TestCase):
   def test_can_stop_forever_cleared_when_long_inactive(self):
     """can_stop_forever is cleared when long control is inactive."""
     mgr = MQBStandstillManager()
-    mgr.update(self._cs(esp_stopping=True), long_active=True, accel=-1.0, stopping=True, starting=False)
-    assert mgr.can_stop_forever
+    self._prime_can_stop_forever(mgr)
     mgr.update(self._cs(), long_active=False, accel=-1.0, stopping=True, starting=False)
     assert not mgr.can_stop_forever
 
-  def test_can_stop_forever_cleared_above_stopping_window(self):
-    """can_stop_forever is cleared once vehicle speed rises above the early-stop window."""
+  def test_can_stop_forever_requires_wegimpulse_stillness(self):
+    """can_stop_forever is not set if esp_stopping is active but wheels are still ticking."""
     mgr = MQBStandstillManager()
-    mgr.update(self._cs(esp_stopping=True), long_active=True, accel=-1.0, stopping=True, starting=False)
-    assert mgr.can_stop_forever
-    *_, esp_override = mgr.update(self._cs(v_ego=7.0 / 3.6, standstill=False), long_active=True,
-                                  accel=0.0, stopping=False, starting=False)
+    for i in range(self.WEGIMPULSE_STILLNESS_FRAMES + 1):
+      mgr.update(self._cs(esp_stopping=True, sum_wegimpulse=i), long_active=True, accel=-1.0, stopping=True, starting=False)
     assert not mgr.can_stop_forever
-    assert esp_override is None
 
-  def test_stopping_override_in_4_to_6_kph_window_without_can_stop_forever(self):
-    """When can_stop_forever is unavailable, 4-6 kph should force ESP stopping and suppress starting."""
+  def test_can_stop_forever_requires_esp_stopping(self):
+    """can_stop_forever is not set by wheel stillness alone — esp_stopping must also be active."""
     mgr = MQBStandstillManager()
-    *_, esp_override = \
-      mgr.update(self._cs(v_ego=5.0 / 3.6, standstill=False), long_active=True, accel=-1.0, stopping=False, starting=True)
+    for _ in range(self.WEGIMPULSE_STILLNESS_FRAMES + 1):
+      mgr.update(self._cs(esp_stopping=False), long_active=True, accel=-1.0, stopping=True, starting=False)
     assert not mgr.can_stop_forever
+
+  def test_stopping_override_fires_once_at_stillness_threshold(self):
+    """A single STOP override is sent on the exact frame wheels have been still for WEGIMPULSE_STILLNESS_FRAMES.
+    Uses standstill=False to isolate the wegimpulse trigger from the cycling hold path."""
+    mgr = MQBStandstillManager()
+    cs = self._cs(standstill=False)  # keep cycling hold inactive so only wegimpulse trigger fires STOP
+    for i in range(self.WEGIMPULSE_STILLNESS_FRAMES):
+      *_, esp_override = mgr.update(cs, long_active=True, accel=-1.0, stopping=True, starting=False)
+      assert esp_override != ESPOverride.STOP, f"STOP override fired early at frame {i}"
+    *_, esp_override = mgr.update(cs, long_active=True, accel=-1.0, stopping=True, starting=False)
     assert esp_override == ESPOverride.STOP
+    # frame after: counter is now 11, == check no longer matches, STOP does not fire again
+    *_, esp_override = mgr.update(cs, long_active=True, accel=-1.0, stopping=True, starting=False)
+    assert esp_override != ESPOverride.STOP
 
-  def test_stopping_override_not_applied_when_can_stop_forever(self):
-    """The 4-6 kph stopping override should not override can_stop_forever behavior."""
+  def test_wegimpulse_change_resets_stillness_counter(self):
+    """A wegimpulse change resets the stillness counter, delaying the STOP trigger."""
     mgr = MQBStandstillManager()
-    mgr.update(self._cs(esp_stopping=True), long_active=True, accel=-1.0, stopping=True, starting=False)
+    for _ in range(self.WEGIMPULSE_STILLNESS_FRAMES - 1):
+      mgr.update(self._cs(sum_wegimpulse=0), long_active=True, accel=-1.0, stopping=True, starting=False)
+    # wheel ticks just before threshold — counter resets
+    mgr.update(self._cs(sum_wegimpulse=1), long_active=True, accel=-1.0, stopping=True, starting=False)
+    assert mgr.frames_since_wegimpulse_change == 0
+    assert not mgr.can_stop_forever
+
+  def test_can_stop_forever_persists_after_esp_stopping_clears(self):
+    """can_stop_forever remains set even if esp_stopping is no longer active, until hold confirms."""
+    mgr = MQBStandstillManager()
+    self._prime_can_stop_forever(mgr)
+    *_, esp_override = mgr.update(self._cs(esp_stopping=False), long_active=True, accel=0.5, stopping=False, starting=False)
     assert mgr.can_stop_forever
-    *_, esp_override = \
-      mgr.update(self._cs(v_ego=5.0 / 3.6, standstill=False), long_active=True, accel=-1.0, stopping=False, starting=True)
     assert esp_override == ESPOverride.START
 
   def test_low_speed_uphill_enters_stop_commit_before_launch(self):
@@ -255,13 +278,15 @@ class TestVolkswagenMQBStandstillManager(unittest.TestCase):
   def test_theoretical_safe_speed_scales_with_grade(self):
     """The zero-rollback threshold grows quickly with grade for a typical MQB mass."""
     mgr = MQBStandstillManager(vehicle_mass=1540.0)
-    assert abs(mgr.get_theoretical_safe_speed(10.0, 0.0) - 0.7219422598811885) < 1e-9
+    expected_10 = (1.5 * (MQBStandstillManager.GRAVITY * 10.0 / math.sqrt(10.0**2 + 10000.0))**2 /
+                   (MQBStandstillManager.BRAKE_TORQUE_RAMP_RATE / (1540.0 * MQBStandstillManager.ASSUMED_WHEEL_RADIUS)))
+    assert abs(mgr.get_theoretical_safe_speed(10.0, 0.0) - expected_10) < 1e-9
     assert mgr.get_theoretical_safe_speed(12.0, 0.0) > mgr.get_theoretical_safe_speed(10.0, 0.0)
 
   def test_stop_commit_enters_below_safe_speed_on_uphill(self):
     """Below the theoretical safe speed on an uphill, negative accel commits to stopping with max brake."""
     mgr = MQBStandstillManager(vehicle_mass=1540.0)
-    _, accel, stopping, starting, *_ = mgr.update(self._cs(grade=10.0, v_ego=0.5, standstill=False),
+    _, accel, stopping, starting, *_ = mgr.update(self._cs(grade=10.0, v_ego=0.15, standstill=False),
                                                   long_active=True, accel=-0.1, stopping=False, starting=False)
     assert mgr.stop_commit_active
     assert not mgr.start_commit_active
@@ -272,11 +297,11 @@ class TestVolkswagenMQBStandstillManager(unittest.TestCase):
   def test_stop_commit_flips_to_start_commit_on_positive_accel(self):
     """Sustained strong accel intent leaves committed stop and enters committed start."""
     mgr = MQBStandstillManager(vehicle_mass=1540.0)
-    mgr.update(self._cs(grade=10.0, v_ego=0.5, standstill=False), long_active=True, accel=-0.1, stopping=False, starting=False)
+    mgr.update(self._cs(grade=10.0, v_ego=0.15, standstill=False), long_active=True, accel=-0.1, stopping=False, starting=False)
     for _ in range(self.START_INTENT_MIN_FRAMES - 1):
-      mgr.update(self._cs(grade=10.0, v_ego=0.5, standstill=False), long_active=True,
+      mgr.update(self._cs(grade=10.0, v_ego=0.15, standstill=False), long_active=True,
                  accel=self.START_INTENT_ACCEL_THRESHOLD + 0.1, stopping=True, starting=False)
-    _, accel, stopping, starting, *_ = mgr.update(self._cs(grade=10.0, v_ego=0.5, standstill=False),
+    _, accel, stopping, starting, *_ = mgr.update(self._cs(grade=10.0, v_ego=0.15, standstill=False),
                                                   long_active=True, accel=self.START_INTENT_ACCEL_THRESHOLD + 0.1,
                                                   stopping=True, starting=False)
     assert not mgr.stop_commit_active
@@ -288,11 +313,11 @@ class TestVolkswagenMQBStandstillManager(unittest.TestCase):
   def test_start_commit_ignores_stop_intent_until_safe_speed(self):
     """Committed start persists below safe speed even if the requested accel changes its mind."""
     mgr = MQBStandstillManager(vehicle_mass=1540.0)
-    mgr.update(self._cs(grade=10.0, v_ego=0.5, standstill=False), long_active=True, accel=-0.1, stopping=False, starting=False)
+    mgr.update(self._cs(grade=10.0, v_ego=0.15, standstill=False), long_active=True, accel=-0.1, stopping=False, starting=False)
     for _ in range(self.START_INTENT_MIN_FRAMES):
-      mgr.update(self._cs(grade=10.0, v_ego=0.5, standstill=False), long_active=True,
+      mgr.update(self._cs(grade=10.0, v_ego=0.15, standstill=False), long_active=True,
                  accel=self.START_INTENT_ACCEL_THRESHOLD + 0.1, stopping=True, starting=False)
-    _, accel, stopping, starting, *_ = mgr.update(self._cs(grade=10.0, v_ego=0.5, standstill=False),
+    _, accel, stopping, starting, *_ = mgr.update(self._cs(grade=10.0, v_ego=0.15, standstill=False),
                                                   long_active=True, accel=-0.1, stopping=True, starting=False)
     assert mgr.start_commit_active
     assert accel == 1.0
@@ -303,9 +328,9 @@ class TestVolkswagenMQBStandstillManager(unittest.TestCase):
     """Committed start still enforces positive accel on shallow grades where hill accel alone is non-positive."""
     mgr = MQBStandstillManager(vehicle_mass=1540.0)
     for _ in range(self.START_INTENT_MIN_FRAMES):
-      mgr.update(self._cs(grade=4.0, v_ego=0.1, standstill=False), long_active=True,
+      mgr.update(self._cs(grade=4.0, v_ego=0.01, standstill=False), long_active=True,
                  accel=self.START_INTENT_ACCEL_THRESHOLD + 0.1, stopping=False, starting=False)
-    _, accel, stopping, starting, *_ = mgr.update(self._cs(grade=4.0, v_ego=0.1, standstill=False),
+    _, accel, stopping, starting, *_ = mgr.update(self._cs(grade=4.0, v_ego=0.01, standstill=False),
                                                   long_active=True, accel=-0.1, stopping=True, starting=False)
     assert mgr.start_commit_active
     assert accel == self.START_COMMIT_ACCEL_MIN
@@ -315,7 +340,7 @@ class TestVolkswagenMQBStandstillManager(unittest.TestCase):
   def test_weak_positive_accel_below_safe_speed_keeps_stop_commit(self):
     """Below the theoretical safe speed, weak positive accel is treated like stop intent to protect hold."""
     mgr = MQBStandstillManager(vehicle_mass=1540.0)
-    _, accel, stopping, starting, *_ = mgr.update(self._cs(grade=10.0, v_ego=0.5, standstill=False),
+    _, accel, stopping, starting, *_ = mgr.update(self._cs(grade=10.0, v_ego=0.15, standstill=False),
                                                   long_active=True, accel=self.START_INTENT_ACCEL_THRESHOLD - 0.05,
                                                   stopping=False, starting=False)
     assert mgr.stop_commit_active
@@ -328,9 +353,9 @@ class TestVolkswagenMQBStandstillManager(unittest.TestCase):
     """Below the theoretical safe speed on an uphill, sustained strong accel enters committed start directly."""
     mgr = MQBStandstillManager(vehicle_mass=1540.0)
     for _ in range(self.START_INTENT_MIN_FRAMES - 1):
-      mgr.update(self._cs(grade=10.0, v_ego=0.5, standstill=False), long_active=True,
+      mgr.update(self._cs(grade=10.0, v_ego=0.15, standstill=False), long_active=True,
                  accel=self.START_INTENT_ACCEL_THRESHOLD + 0.1, stopping=False, starting=False)
-    _, accel, stopping, starting, *_ = mgr.update(self._cs(grade=10.0, v_ego=0.5, standstill=False),
+    _, accel, stopping, starting, *_ = mgr.update(self._cs(grade=10.0, v_ego=0.15, standstill=False),
                                                   long_active=True, accel=self.START_INTENT_ACCEL_THRESHOLD + 0.1,
                                                   stopping=False, starting=False)
     assert not mgr.stop_commit_active
@@ -342,9 +367,9 @@ class TestVolkswagenMQBStandstillManager(unittest.TestCase):
   def test_start_commit_clears_above_safe_speed(self):
     """Committed start clears once measured speed exceeds the theoretical threshold."""
     mgr = MQBStandstillManager(vehicle_mass=1540.0)
-    mgr.update(self._cs(grade=10.0, v_ego=0.5, standstill=False), long_active=True, accel=-0.1, stopping=False, starting=False)
+    mgr.update(self._cs(grade=10.0, v_ego=0.15, standstill=False), long_active=True, accel=-0.1, stopping=False, starting=False)
     for _ in range(self.START_INTENT_MIN_FRAMES):
-      mgr.update(self._cs(grade=10.0, v_ego=0.5, standstill=False), long_active=True,
+      mgr.update(self._cs(grade=10.0, v_ego=0.15, standstill=False), long_active=True,
                  accel=self.START_INTENT_ACCEL_THRESHOLD + 0.1, stopping=True, starting=False)
     _, accel, stopping, starting, *_ = mgr.update(self._cs(grade=10.0, v_ego=0.8, standstill=False),
                                                   long_active=True, accel=self.START_INTENT_ACCEL_THRESHOLD + 0.1,
