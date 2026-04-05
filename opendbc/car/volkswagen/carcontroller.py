@@ -158,18 +158,19 @@ class MQBStandstillManager:
       starting = True
 
     # simple hold: track wheel stillness via wegimpulse counters every frame
-    if self._prev_sum_wegimpulse is None or CS.sum_wegimpulse != self._prev_sum_wegimpulse:
+    # any wheel movement immediately invalidates the hold
+    if CS.sum_wegimpulse != self._prev_sum_wegimpulse:
       self.frames_since_wegimpulse_change = 0
+      self.can_stop_forever = False
     else:
       self.frames_since_wegimpulse_change += 1
     self._prev_sum_wegimpulse = CS.sum_wegimpulse
 
-    # simple hold: once wheels have been still for exactly WEGIMPULSE_STILLNESS_FRAMES, send one STOP frame
-    # to ensure the stopping procedure is initiated before we attempt to hold indefinitely
-    # end the stopping procedure right after it starts, before any hold has been confirmed (hold only confirms at low speed)
-    # if a hold is confirmed before we end the stopping procedure we won't be able to hold indefinitely
+    # simple hold: continuously assert stopping procedure while wheels are confirmed still and we're braking.
+    # end the stopping procedure right after it starts, before any hold has been confirmed (hold only confirms at low speed).
+    # if a hold is confirmed before we end the stopping procedure we won't be able to hold indefinitely.
     if long_active:
-      if self.frames_since_wegimpulse_change == self.WEGIMPULSE_STILLNESS_FRAMES:
+      if self.frames_since_wegimpulse_change >= self.WEGIMPULSE_STILLNESS_FRAMES and accel <= 0:
         esp_override = mqbcan.ESPOverride.STOP
       if CS.esp_stopping and self.frames_since_wegimpulse_change >= self.WEGIMPULSE_STILLNESS_FRAMES:
         self.can_stop_forever = True
@@ -182,21 +183,21 @@ class MQBStandstillManager:
 
 
     # cycling hold: build engine torque via ACC_06 as rollback prevention if needed, ESP braking held via ACC_07
-    if long_active and accel <= 0 and not self.can_stop_forever and (CS.esp_hold_confirmation or CS.out.standstill):
-      # skip torque management for one frame each cycle to avoid check engine light
-      if self.esp_hold_frames > 1:
-        # too much torque and the car moves, too little and the ESP won't cycle its timer
-        # targets 80% of torque needed to hold the car at stop, derived from ESP_15 and some experimentation
-        if CS.grade > 3:
-          hill_accel = 0.045 * CS.grade + 0.0625
-          accel = max(accel, hill_accel)
-        starting = True
-        stopping = False
-      # Near the counter limit, send progressively longer starting pulses:
-      # 1 frame, wait 3, 2 frames, wait 3, 3 frames, wait 3, then hold starting until cutoff.
-      release_phase = self.esp_hold_frames - (self.HOLD_MAX_FRAMES - self.HOLD_RELEASE_TOTAL_FRAMES + 1)
-      is_release_attempt = release_phase >= 0 and release_phase not in (1, 2, 3, 6, 7, 8, 12, 13, 14)
-      esp_override = mqbcan.ESPOverride.START if is_release_attempt else mqbcan.ESPOverride.STOP
+    # if long_active and accel <= 0 and not self.can_stop_forever and (CS.esp_hold_confirmation or CS.out.standstill):
+    #   # skip torque management for one frame each cycle to avoid check engine light
+    #   if self.esp_hold_frames > 1:
+    #     # too much torque and the car moves, too little and the ESP won't cycle its timer
+    #     # targets 80% of torque needed to hold the car at stop, derived from ESP_15 and some experimentation
+    #     if CS.grade > 3:
+    #       hill_accel = 0.045 * CS.grade + 0.0625
+    #       accel = max(accel, hill_accel)
+    #     starting = True
+    #     stopping = False
+    #   # Near the counter limit, send progressively longer starting pulses:
+    #   # 1 frame, wait 3, 2 frames, wait 3, 3 frames, wait 3, then hold starting until cutoff.
+    #   release_phase = self.esp_hold_frames - (self.HOLD_MAX_FRAMES - self.HOLD_RELEASE_TOTAL_FRAMES + 1)
+    #   is_release_attempt = release_phase >= 0 and release_phase not in (1, 2, 3, 6, 7, 8, 12, 13, 14)
+    #   esp_override = mqbcan.ESPOverride.START if is_release_attempt else mqbcan.ESPOverride.STOP
 
     # cycling hold: standstill timer resets under two conditions:
     # - wheels move while hold is not confirmed

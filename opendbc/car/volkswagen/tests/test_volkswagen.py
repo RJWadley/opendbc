@@ -119,18 +119,24 @@ class TestVolkswagenMQBStandstillManager(unittest.TestCase):
       mgr.update(self._cs(esp_stopping=False), long_active=True, accel=-1.0, stopping=True, starting=False)
     assert not mgr.can_stop_forever
 
-  def test_stopping_override_fires_once_at_stillness_threshold(self):
-    """A single STOP override is sent on the exact frame wheels have been still for WEGIMPULSE_STILLNESS_FRAMES.
+  def test_stopping_override_fires_continuously_from_stillness_threshold(self):
+    """STOP override fires on every frame once wheels have been still for >= WEGIMPULSE_STILLNESS_FRAMES while braking.
     Uses standstill=False to isolate the wegimpulse trigger from the cycling hold path."""
     mgr = MQBStandstillManager()
     cs = self._cs(standstill=False)  # keep cycling hold inactive so only wegimpulse trigger fires STOP
     for i in range(self.WEGIMPULSE_STILLNESS_FRAMES):
       *_, esp_override = mgr.update(cs, long_active=True, accel=-1.0, stopping=True, starting=False)
       assert esp_override != ESPOverride.STOP, f"STOP override fired early at frame {i}"
-    *_, esp_override = mgr.update(cs, long_active=True, accel=-1.0, stopping=True, starting=False)
-    assert esp_override == ESPOverride.STOP
-    # frame after: counter is now 11, == check no longer matches, STOP does not fire again
-    *_, esp_override = mgr.update(cs, long_active=True, accel=-1.0, stopping=True, starting=False)
+    for _ in range(3):  # fires on frame 10, 11, 12 — continuously, not just once
+      *_, esp_override = mgr.update(cs, long_active=True, accel=-1.0, stopping=True, starting=False)
+      assert esp_override == ESPOverride.STOP
+
+  def test_stopping_override_suppressed_on_positive_accel(self):
+    """STOP override does not fire when accel is positive, even if wheels have been still long enough."""
+    mgr = MQBStandstillManager()
+    cs = self._cs(standstill=False)
+    for _ in range(self.WEGIMPULSE_STILLNESS_FRAMES + 1):
+      *_, esp_override = mgr.update(cs, long_active=True, accel=0.5, stopping=False, starting=True)
     assert esp_override != ESPOverride.STOP
 
   def test_wegimpulse_change_resets_stillness_counter(self):
@@ -141,6 +147,13 @@ class TestVolkswagenMQBStandstillManager(unittest.TestCase):
     # wheel ticks just before threshold — counter resets
     mgr.update(self._cs(sum_wegimpulse=1), long_active=True, accel=-1.0, stopping=True, starting=False)
     assert mgr.frames_since_wegimpulse_change == 0
+    assert not mgr.can_stop_forever
+
+  def test_can_stop_forever_cleared_on_wegimpulse_change(self):
+    """can_stop_forever is immediately cleared when any wheel tick is detected."""
+    mgr = MQBStandstillManager()
+    self._prime_can_stop_forever(mgr)
+    mgr.update(self._cs(sum_wegimpulse=1), long_active=True, accel=-1.0, stopping=True, starting=False)
     assert not mgr.can_stop_forever
 
   def test_can_stop_forever_persists_after_esp_stopping_clears(self):
