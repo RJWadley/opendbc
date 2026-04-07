@@ -103,25 +103,31 @@ class MQBStandstillManager:
     # vehicle has strong intent to drive away to prevent a scenario where we want to stop but cannot build
     # brake torque fast enough to prevent rollback.
     if long_active:
+      # this is just for tuning tbh
+      if CS.esp_stopping:
+        self.start_commit_active = False
+        self.stop_commit_active = True
       # this only happens if the user preEnables, we must start
-      if CS.esp_hold_confirmation:
+      elif CS.esp_hold_confirmation:
         self.start_commit_active = True
         self.stop_commit_active = False
       # start commit ends when we exceed safe stop speed
       elif self.start_commit_active:
         if CS.out.vEgo > theoretical_safe_stop_speed and not at_standstill:
           self.start_commit_active = False
+          self.stop_commit_active = False
       # stop commit ends if we want to drive away
       elif self.stop_commit_active:
         if can_leave_stop and accel > 0:
-          self.stop_commit_active = False
           self.start_commit_active = True
+          self.stop_commit_active = False
       # trigger stop commit when necessary
       elif CS.out.vEgo < theoretical_safe_stop_speed:
+        self.start_commit_active = False
         self.stop_commit_active = True
     else:
-      self.stop_commit_active = False
       self.start_commit_active = False
+      self.stop_commit_active = False
 
     # apply acceleration adjustments based on our current rollback prevention state
     if long_active:
