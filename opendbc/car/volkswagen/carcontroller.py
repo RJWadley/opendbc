@@ -52,6 +52,8 @@ class CarController(CarControllerBase):
     self.gra_acc_counter_last = None
     self.acc_counter_seeded = False
     self.hca_mitigation = HCAMitigation(self.CCP)
+    self.standstill_acc_steps = 0
+    self._standstill_pulse_steps = round(0.5 / (DT_CTRL * self.CCP.ACC_CONTROL_STEP))
 
   def update(self, CC, CS, now_nanos):
     actuators = CC.actuators
@@ -94,6 +96,13 @@ class CarController(CarControllerBase):
         accel = float(np.clip(actuators.accel, self.CCP.ACCEL_MIN, self.CCP.ACCEL_MAX) if CC.longActive else 0)
         stopping = CS.out.vEgo < self.CCP.VW_LOW_SPEED_STATE_SPEED and actuators.longControlState == LongCtrlState.stopping
         starting = CS.out.vEgo < self.CCP.VW_LOW_SPEED_STATE_SPEED and not stopping
+        if CS.out.standstill:
+          # During standstill: pulse starting=True, stopping=False once every 0.5 s; all other frames keep normal values
+          if self.standstill_acc_steps % self._standstill_pulse_steps == 0:
+            starting, stopping = True, False
+          self.standstill_acc_steps += 1
+        else:
+          self.standstill_acc_steps = 0
         can_sends.extend(self.CCS.create_acc_accel_control(self.packer_pt, self.CAN.pt, CS.acc_type, CC.longActive or CC.cruiseControl.override, accel,
                                                            acc_control, stopping, starting, CS.esp_hold_confirmation))
 
