@@ -78,7 +78,7 @@ class MQBStandstillManager:
     esp_override: mqbcan.ESPOverride | None = None
     theoretical_safe_stop_speed = self.get_theoretical_safe_speed(CS.grade, CS.out.vEgo)
     can_leave_stop = max_planned_speed > theoretical_safe_stop_speed
-    hill_launch_accel = 0.2 * CS.grade - 1
+    hill_launch_accel = 0.1 * CS.grade
 
     if CS.rolling_backward:
       self.rollback_detected = True
@@ -127,14 +127,14 @@ class MQBStandstillManager:
 
     # apply acceleration adjustments based on our current rollback prevention state
     if long_active:
-      if self.stop_commit_active or (self.rollback_detected and accel <= 0):
-        accel = -0.5 if CS.rolling_forward else -3.5
-        stopping = True
-        starting = False
-      elif self.start_commit_active or (self.rollback_detected and accel > 0):
+      if self.start_commit_active or (self.rollback_detected and accel > 0):
         accel = max(accel, hill_launch_accel, 0.2)
         stopping = False
         starting = True
+      elif self.stop_commit_active or (self.rollback_detected and accel <= 0):
+        accel = -0.5 if CS.rolling_forward else -3.5
+        stopping = True
+        starting = False
 
     # the magic sauce for infinite standstill
     # begin a stopping procedure, then exit to starting state before the car reaches standstill
