@@ -2,7 +2,7 @@ import numpy as np
 from collections import defaultdict
 
 from opendbc.can import CANDefine, CANParser
-from opendbc.car import Bus, create_button_events, structs
+from opendbc.car import Bus, ButtonSpec, create_button_events_from_specs, structs
 from opendbc.car.common.conversions import Conversions as CV
 from opendbc.car.honda.hondacan import CanBus
 from opendbc.car.honda.values import CAR, DBC, STEER_THRESHOLD, HONDA_BOSCH, HONDA_BOSCH_ALT_RADAR, HONDA_BOSCH_CANFD, \
@@ -13,9 +13,14 @@ from opendbc.car.interfaces import CarStateBase
 TransmissionType = structs.CarParams.TransmissionType
 ButtonType = structs.CarState.ButtonEvent.Type
 
-BUTTONS_DICT = {CruiseButtons.RES_ACCEL: ButtonType.accelCruise, CruiseButtons.DECEL_SET: ButtonType.decelCruise,
-                CruiseButtons.MAIN: ButtonType.mainCruise, CruiseButtons.CANCEL: ButtonType.cancel}
-SETTINGS_BUTTONS_DICT = {CruiseSettings.DISTANCE: ButtonType.gapAdjustCruise, CruiseSettings.LKAS: ButtonType.lkas}
+BUTTONS = (
+  ButtonSpec(ButtonType.accelCruise, "SCM_BUTTONS", "CRUISE_BUTTONS", (CruiseButtons.RES_ACCEL,), ("resume", "increase")),
+  ButtonSpec(ButtonType.decelCruise, "SCM_BUTTONS", "CRUISE_BUTTONS", (CruiseButtons.DECEL_SET,), ("set", "decrease")),
+  ButtonSpec(ButtonType.mainCruise, "SCM_BUTTONS", "CRUISE_BUTTONS", (CruiseButtons.MAIN,), ("main",)),
+  ButtonSpec(ButtonType.cancel, "SCM_BUTTONS", "CRUISE_BUTTONS", (CruiseButtons.CANCEL,), ("cancel",)),
+  ButtonSpec(ButtonType.gapAdjustCruise, "SCM_BUTTONS", "CRUISE_SETTING", (CruiseSettings.DISTANCE,), ("gap",)),
+  ButtonSpec(ButtonType.lkas, "SCM_BUTTONS", "CRUISE_SETTING", (CruiseSettings.LKAS,), ("lkas",)),
+)
 
 
 class CarState(CarStateBase):
@@ -42,7 +47,7 @@ class CarState(CarStateBase):
     self.low_speed_alert = False
 
     self.dynamic_v_cruise_units = self.CP.carFingerprint in (HONDA_BOSCH_RADARLESS | HONDA_BOSCH_ALT_RADAR | HONDA_BOSCH_CANFD)
-    self.cruise_setting = 0
+    self.button_states = {button: False for button in BUTTONS}
     self.v_cruise_pcm_prev = 0
 
     # When available we use cp.vl["CAR_SPEED"]["ROUGH_CAR_SPEED_2"] to populate vEgoCluster
@@ -62,12 +67,6 @@ class CarState(CarStateBase):
     # car params
     v_weight_v = [0., 1.]  # don't trust smooth speed at low values to avoid premature zero snapping
     v_weight_bp = [1., 6.]   # smooth blending, below ~0.6m/s the smooth speed snaps to zero
-
-    # update prevs, update must run once per loop
-    prev_cruise_buttons = self.cruise_buttons
-    prev_cruise_setting = self.cruise_setting
-    self.cruise_setting = cp.vl["SCM_BUTTONS"]["CRUISE_SETTING"]
-    self.cruise_buttons = cp.vl["SCM_BUTTONS"]["CRUISE_BUTTONS"]
 
     # used for car hud message
     # TODO: find CAR_SPEED for HONDA_ODYSSEY_TWN or use ACC_HUD w/ detection
@@ -225,10 +224,7 @@ class CarState(CarStateBase):
       ret.leftBlindspot = cp_body.vl["BSM_STATUS_LEFT"]["BSM_ALERT"] == 1
       ret.rightBlindspot = cp_body.vl["BSM_STATUS_RIGHT"]["BSM_ALERT"] == 1
 
-    ret.buttonEvents = [
-      *create_button_events(self.cruise_buttons, prev_cruise_buttons, BUTTONS_DICT),
-      *create_button_events(self.cruise_setting, prev_cruise_setting, SETTINGS_BUTTONS_DICT),
-    ]
+    ret.buttonEvents = create_button_events_from_specs(cp.vl, self.button_states, BUTTONS)
 
     return ret
 

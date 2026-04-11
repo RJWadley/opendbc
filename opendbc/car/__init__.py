@@ -18,6 +18,15 @@ ACCELERATION_DUE_TO_GRAVITY = 9.81  # m/s^2
 ButtonType = structs.CarState.ButtonEvent.Type
 
 
+@dataclass(frozen=True)
+class ButtonSpec:
+  event_type: structs.CarState.ButtonEvent.Type
+  msg: str
+  sig: str
+  values: tuple[int, ...]
+  roles: tuple[str, ...] = ()
+
+
 def apply_hysteresis(val: float, val_steady: float, hyst_gap: float) -> float:
   if val > val_steady + hyst_gap:
     val_steady = val - hyst_gap
@@ -38,6 +47,19 @@ def create_button_events(cur_btn: int, prev_btn: int, buttons_dict: dict[int, st
     if btn != unpressed_btn:
       events.append(structs.CarState.ButtonEvent(pressed=pressed,
                                                  type=buttons_dict.get(btn, ButtonType.unknown)))
+  return events
+
+
+def create_button_events_from_specs(vl: dict[str, dict[str, int]], button_states: dict[ButtonSpec, bool],
+                                    buttons: tuple[ButtonSpec, ...]) -> list[structs.CarState.ButtonEvent]:
+  events: list[structs.CarState.ButtonEvent] = []
+
+  for button in buttons:
+    pressed = vl[button.msg][button.sig] in button.values
+    if button_states[button] != pressed:
+      events.append(structs.CarState.ButtonEvent(pressed=pressed, type=button.event_type))
+    button_states[button] = pressed
+
   return events
 
 
