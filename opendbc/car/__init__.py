@@ -20,11 +20,22 @@ ButtonType = structs.CarState.ButtonEvent.Type
 
 @dataclass(frozen=True)
 class ButtonSpec:
-  event_type: structs.CarState.ButtonEvent.Type
+  roles: tuple[str, ...]
   msg: str
   sig: str
   values: tuple[int, ...]
-  roles: tuple[str, ...] = ()
+
+
+ROLE_TO_BUTTON_TYPE = {
+  "set": ButtonType.setCruise,
+  "resume": ButtonType.resumeCruise,
+  "increase": ButtonType.accelCruise,
+  "decrease": ButtonType.decelCruise,
+  "cancel": ButtonType.cancel,
+  "main": ButtonType.mainCruise,
+  "gap": ButtonType.gapAdjustCruise,
+  "lkas": ButtonType.lkas,
+}
 
 
 def apply_hysteresis(val: float, val_steady: float, hyst_gap: float) -> float:
@@ -57,7 +68,8 @@ def create_button_events_from_specs(vl: dict[str, dict[str, int]], button_states
   for button in buttons:
     pressed = vl[button.msg][button.sig] in button.values
     if button_states[button] != pressed:
-      events.append(structs.CarState.ButtonEvent(pressed=pressed, type=button.event_type))
+      for role in button.roles:
+        events.append(structs.CarState.ButtonEvent(pressed=pressed, type=ROLE_TO_BUTTON_TYPE[role]))
     button_states[button] = pressed
 
   return events

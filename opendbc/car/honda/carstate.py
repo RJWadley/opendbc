@@ -11,15 +11,14 @@ from opendbc.car.honda.values import CAR, DBC, STEER_THRESHOLD, HONDA_BOSCH, HON
 from opendbc.car.interfaces import CarStateBase
 
 TransmissionType = structs.CarParams.TransmissionType
-ButtonType = structs.CarState.ButtonEvent.Type
 
 BUTTONS = (
-  ButtonSpec(ButtonType.accelCruise, "SCM_BUTTONS", "CRUISE_BUTTONS", (CruiseButtons.RES_ACCEL,), ("resume", "increase")),
-  ButtonSpec(ButtonType.decelCruise, "SCM_BUTTONS", "CRUISE_BUTTONS", (CruiseButtons.DECEL_SET,), ("set", "decrease")),
-  ButtonSpec(ButtonType.mainCruise, "SCM_BUTTONS", "CRUISE_BUTTONS", (CruiseButtons.MAIN,), ("main",)),
-  ButtonSpec(ButtonType.cancel, "SCM_BUTTONS", "CRUISE_BUTTONS", (CruiseButtons.CANCEL,), ("cancel",)),
-  ButtonSpec(ButtonType.gapAdjustCruise, "SCM_BUTTONS", "CRUISE_SETTING", (CruiseSettings.DISTANCE,), ("gap",)),
-  ButtonSpec(ButtonType.lkas, "SCM_BUTTONS", "CRUISE_SETTING", (CruiseSettings.LKAS,), ("lkas",)),
+  ButtonSpec(("resume", "increase"), "SCM_BUTTONS", "CRUISE_BUTTONS", (CruiseButtons.RES_ACCEL,)),
+  ButtonSpec(("set", "decrease"), "SCM_BUTTONS", "CRUISE_BUTTONS", (CruiseButtons.DECEL_SET,)),
+  ButtonSpec(("main",), "SCM_BUTTONS", "CRUISE_BUTTONS", (CruiseButtons.MAIN,)),
+  ButtonSpec(("cancel",), "SCM_BUTTONS", "CRUISE_BUTTONS", (CruiseButtons.CANCEL,)),
+  ButtonSpec(("gap",), "SCM_BUTTONS", "CRUISE_SETTING", (CruiseSettings.DISTANCE,)),
+  ButtonSpec(("lkas",), "SCM_BUTTONS", "CRUISE_SETTING", (CruiseSettings.LKAS,)),
 )
 
 
