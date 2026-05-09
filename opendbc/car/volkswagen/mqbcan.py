@@ -105,6 +105,14 @@ class ESPOverride(Enum):
   START = auto()
 
 
+from enum import Enum, auto
+
+
+class ESPOverride(Enum):
+  STOP = auto()
+  START = auto()
+
+
 def create_acc_accel_control(packer, bus, acc_type, acc_enabled, accel, acc_control, stopping, starting,
                              esp_hold, esp_override):
   commands = []
