@@ -274,8 +274,8 @@ class CarController(CarControllerBase):
       if self.frame % self.CCP.ACC_CONTROL_STEP == 0:
         long_active = CC.longActive
         accel = actuators.accel
-        stopping = actuators.longControlState == LongCtrlState.stopping
-        starting = actuators.longControlState == LongCtrlState.pid and (CS.esp_hold_confirmation or CS.out.vEgo < self.CP.vEgoStopping)
+        stopping = CS.out.vEgo < self.CCP.VW_LOW_SPEED_STATE_SPEED and actuators.longControlState == LongCtrlState.stopping
+        starting = CS.out.vEgo < self.CCP.VW_LOW_SPEED_STATE_SPEED and not stopping
         esp_override = None
 
         if self.CCS == mqbcan and CS.acc_type == 1:
